@@ -10,7 +10,7 @@
   <groupId>com.googlecode.playn</groupId>
   <artifactId>playn-project</artifactId>
   <packaging>pom</packaging>
-  <version>1.1-SNAPSHOT</version>
+  <version>1.2-SNAPSHOT</version>
   <name>PlayN Project</name>
   <url>http://code.google.com/p/playn</url>
   <description>Cross platform game library for N≥4 platforms.</description>
@@ -46,7 +46,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <android.version>2.3.3</android.version>
     <android.maven.version>3.0.0-alpha-13</android.maven.version>
-    <monotouch.version>2.1-SNAPSHOT</monotouch.version>
+    <monotouch.version>5.1</monotouch.version>
     <gwt.version>2.4.0</gwt.version>
     <!--
       GWT log levels:
