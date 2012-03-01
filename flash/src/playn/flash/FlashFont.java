@@ -1,5 +1,5 @@
-/*
- * Copyright 2011 Google Inc.
+/**
+ * Copyright 2010 The PlayN Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -13,23 +13,20 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
+package playn.flash;
 
-package flash.display;
+import playn.core.AbstractFont;
 
-import flash.gwt.FlashImport;
+class FlashFont extends AbstractFont {
 
-@FlashImport({"flash.display.Bitmap"})
-final public class Bitmap extends DisplayObject {
-  protected Bitmap() {}
-  public static native Bitmap create(BitmapData data) /*-{
-    return new flash.display.Bitmap(data, "auto", true);
-  }-*/;
-  /**
-   * @param bitmapData
-   */
-  public native void setBitmapData(BitmapData bitmapData) /*-{
-    this.bitmapData = bitmapData;
-    this.smoothing = true;
-    this.pixelSnapping = "auto";
-  }-*/;
+  /** For use when no font is specified. */
+  public static final FlashFont DEFAULT = new FlashFont("Times New Roman", Style.PLAIN, 12);
+
+  public FlashFont(String name, Style style, float size) {
+    super(quoteFontName(name), style, size);
+  }
+
+  protected static final String quoteFontName(String name) {
+    return (!name.startsWith("\"") && name.contains(" ")) ? ('"' + name + '"') : name;
+  }
 }

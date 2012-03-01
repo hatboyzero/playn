@@ -67,13 +67,32 @@ public class FlashCanvasLayer extends FlashLayer implements CanvasLayer {
 
   @FlashImport({"com.googlecode.flashcanvas.CanvasRenderingContext2D"})
   final static class Context2d extends JavaScriptObject {
+
+      /**
+   * Enum for text baseline style.
+   */
+   public enum TextBaseline {
+      ALPHABETIC("alphabetic"), BOTTOM("bottom"), HANGING("hanging"), IDEOGRAPHIC("ideographic"),
+      MIDDLE("middle"), TOP("top");
+
+      private final String value;
+
+      private TextBaseline(String value) {
+          this.value = value;
+      }
+
+      public String getValue() {
+          return value;
+      }
+   }
+
     protected Context2d() {}
+
     public native void resize(int x, int y) /*-{
       this.resize(x,y);
     }-*/;
 
-
-     public native void beginPath() /*-{
+    public native void beginPath() /*-{
       this.beginPath();
     }-*/;
 
@@ -85,11 +104,19 @@ public class FlashCanvasLayer extends FlashLayer implements CanvasLayer {
       this.lineTo(x, y);
     }-*/;
 
-     public native void stroke() /*-{
+    public native void stroke() /*-{
       this.stroke();
     }-*/;
 
-     public native void setStrokeStyle(String color) /*-{
+    public native void clip() /*-{
+      this.clip();
+    }-*/;
+
+    public native void setGlobalAlpha(float alpha) /*-{
+        this.globalAlpha = alpha;
+    }-*/;
+
+    public native void setStrokeStyle(String color) /*-{
       this.strokeStyle = color;
     }-*/;
 
@@ -140,7 +167,7 @@ public class FlashCanvasLayer extends FlashLayer implements CanvasLayer {
 
     public native void translate(float tx, float ty) /*-{
     // TODO Auto-generated method stub
-      this.translate(sx, sy);
+      this.translate(tx, ty);
     }-*/;
     /**
      * @param m11
@@ -162,6 +189,10 @@ public class FlashCanvasLayer extends FlashLayer implements CanvasLayer {
 
     public native void fillText(String text, float x, float y) /*-{
       this.fillText(text, x, y);
+    }-*/;
+
+    public native void rect(float x, float y, float w, float h) /*-{
+        this.rect(x, y, w, h);
     }-*/;
 
     public native void fillRect(float x, float y, float w, float h) /*-{
@@ -204,6 +235,30 @@ public class FlashCanvasLayer extends FlashLayer implements CanvasLayer {
     public native void setLineWidth(float width) /*-{
       this.lineWidth = width;
     }-*/;
+
+    public native void setTextBaseline(String baseline) /*-{
+       this.textBaseline = baseline;
+    }-*/;
+
+      public native void setFont(String font) /*-{
+          this.font = font;
+      }-*/;
+
+
+      final static class Measure extends JavaScriptObject {
+          protected Measure(){}
+
+          public native int getWidth() /*-{
+              return this.width;
+          }-*/;
+          
+          public native int getHeight() /*-{
+              return this.height-4;
+          }-*/;
+      }
+      public native Measure measureText(String line) /*-{
+          return this.measureText(line);
+      }-*/;
   }
 
   @Override

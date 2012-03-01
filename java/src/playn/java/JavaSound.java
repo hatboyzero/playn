@@ -13,7 +13,12 @@
  */
 package playn.java;
 
+import playn.core.Sound;
+import playn.core.ResourceCallback;
+
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
@@ -24,6 +29,7 @@ import javax.sound.sampled.LineUnavailableException;
 import playn.core.Asserts;
 import playn.core.PlayN;
 import playn.core.Sound;
+import playn.core.ResourceCallback;
 
 class JavaSound implements Sound {
 
@@ -31,9 +37,25 @@ class JavaSound implements Sound {
   private Clip clip;
   private boolean looping;
 
-  public JavaSound(String name, InputStream in) {
+  private List<ResourceCallback<Sound>> callbacks;
+
+  JavaSound(String name, final InputStream inputStream) {
     this.name = name;
 
+    JavaAssets.doResourceAction(new Runnable() {
+      public void run () {
+        init(inputStream);
+        if (callbacks != null) {
+          for (ResourceCallback<Sound> callback : callbacks) {
+            callback.done(JavaSound.this);
+          }
+          callbacks = null;
+        }
+      }
+    });
+  }
+
+  private void init(InputStream inputStream) {
     try {
       clip = AudioSystem.getClip();
     } catch (LineUnavailableException e) {
@@ -49,7 +71,7 @@ class JavaSound implements Sound {
 
     AudioInputStream ais;
     try {
-      ais = AudioSystem.getAudioInputStream(in);
+      ais = AudioSystem.getAudioInputStream(inputStream);
       if (name.endsWith(".mp3")) {
         AudioFormat baseFormat = ais.getFormat();
         AudioFormat decodedFormat = new AudioFormat(
@@ -72,7 +94,7 @@ class JavaSound implements Sound {
       clip.open(ais);
     } catch (Exception e) {
       PlayN.log().warn("Failed to open sound " + name, e);
-      return;
+      return; // give up
     }
   }
 
@@ -113,5 +135,17 @@ class JavaSound implements Sound {
   @Override
   public boolean isPlaying() {
     return (clip != null) && clip.isActive();
+  }
+
+  @Override
+  public void addCallback(ResourceCallback<Sound> callback) {
+    if (clip != null) {
+      callback.done(this);
+    } else {
+      if (callbacks == null) {
+        callbacks = new ArrayList<ResourceCallback<Sound>>();
+      }
+      callbacks.add(callback);
+    }
   }
 }
