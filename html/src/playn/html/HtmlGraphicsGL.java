@@ -13,6 +13,10 @@
  */
 package playn.html;
 
+import com.google.gwt.dom.client.CanvasElement;
+import com.google.gwt.dom.client.Document;
+import com.google.gwt.dom.client.Element;
+
 import playn.core.CanvasLayer;
 import playn.core.GroupLayer;
 import playn.core.Image;
@@ -20,19 +24,17 @@ import playn.core.ImageLayer;
 import playn.core.ImmediateLayer;
 import playn.core.SurfaceLayer;
 import playn.core.gl.CanvasLayerGL;
+import playn.core.gl.GL20;
 import playn.core.gl.GroupLayerGL;
 import playn.core.gl.ImageLayerGL;
 import playn.core.gl.ImmediateLayerGL;
 import playn.core.gl.SurfaceLayerGL;
 
-import com.google.gwt.dom.client.CanvasElement;
-import com.google.gwt.dom.client.Document;
-import com.google.gwt.dom.client.Element;
-
 class HtmlGraphicsGL extends HtmlGraphics {
 
   private final CanvasElement canvas;
   private final HtmlGLContext ctx;
+  private final HtmlGL20 gl20;
   private final GroupLayerGL rootLayer;
 
   HtmlGraphicsGL() throws RuntimeException {
@@ -40,6 +42,7 @@ class HtmlGraphicsGL extends HtmlGraphics {
     rootElement.appendChild(canvas);
     try {
       ctx = new HtmlGLContext(canvas);
+      gl20 = new HtmlGL20(ctx.gl);
       rootLayer = new GroupLayerGL(ctx);
     } catch (RuntimeException re) {
       // Give up. HtmlPlatform will catch the exception and fall back to dom/canvas.
@@ -94,7 +97,7 @@ class HtmlGraphicsGL extends HtmlGraphics {
     super.setSize(width, height);
     canvas.setWidth(width);
     canvas.setHeight(height);
-    ctx.bindFramebuffer(null, width, height, true);
+    ctx.setSize(width, height);
   }
 
   @Override
@@ -108,8 +111,23 @@ class HtmlGraphicsGL extends HtmlGraphics {
   }
 
   @Override
-  void paintLayers() {
+  public float scaleFactor() {
+    return ctx.scaleFactor;
+  }
+
+  @Override
+  public GL20 gl20() {
+    return gl20;
+  }
+
+  @Override
+  void preparePaint() {
     ctx.processPending();
+    ctx.preparePaint();
+  }
+
+  @Override
+  void paintLayers() {
     ctx.paint(rootLayer);
   }
 

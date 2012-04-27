@@ -108,14 +108,17 @@ public class HtmlPlatform implements Platform {
     return agentInfo;
   }
 
-  private HtmlAssets assets = GWT.create(HtmlAssets.class);
+  // Provide a static logging instance so that it can be used by other subsystems during
+  // initialization, before we have called PlayN.setPlatform
+  static HtmlLog log = GWT.create(HtmlLog.class);
+
+  private HtmlAssets assets = new HtmlAssets();
   private HtmlAudio audio = new HtmlAudio();
   private HtmlRegularExpression regularExpression = new HtmlRegularExpression();
   private Game game;
   private HtmlGraphics graphics;
   private HtmlJson json = new HtmlJson();
   private HtmlKeyboard keyboard = new HtmlKeyboard();
-  private HtmlLog log;
   private HtmlNet net = new HtmlNet();
   private HtmlPointer pointer;
   private HtmlMouse mouse;
@@ -128,10 +131,7 @@ public class HtmlPlatform implements Platform {
 
   private static AgentInfo agentInfo = computeAgentInfo();
 
-  // Non-instantiable.
-  private HtmlPlatform(Mode mode) {
-    // Setup logging first, so it can be used by other subsystems
-    log = GWT.create(HtmlLog.class);
+  protected HtmlPlatform(Mode mode) {
     if (!GWT.isProdMode()) {
       log.info("You are running in GWT Development Mode. "
           + "For optimal performance you may want to use an alternative method. "
@@ -192,12 +192,6 @@ public class HtmlPlatform implements Platform {
 
   @Override
   public HtmlAssets assets() {
-    return assets;
-  }
-
-  /** @deprecated Use {@link #assets}. */
-  @Deprecated
-  public HtmlAssets assetManager() {
     return assets;
   }
 
@@ -299,6 +293,7 @@ public class HtmlPlatform implements Platform {
           }
         }
 
+        graphics.preparePaint();
         game.paint(accum / updateRate);
         graphics.paintLayers();
       }

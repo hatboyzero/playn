@@ -29,18 +29,27 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
 import java.awt.geom.Rectangle2D;
+import java.awt.geom.RoundRectangle2D;
 import java.util.Deque;
 import java.util.LinkedList;
 
 class JavaCanvas implements Canvas {
 
+  interface Drawable {
+    void draw(Graphics2D gfx, float dx, float dy, float dw, float dh);
+    void draw(Graphics2D gfx, float sx, float sy, float sw, float sh,
+              float dx, float dy, float dw, float dh);
+  }
+
   final Graphics2D gfx;
+  private boolean isDirty;
   private final int width, height;
   private Deque<JavaCanvasState> stateStack = new LinkedList<JavaCanvasState>();
 
   private Ellipse2D.Float ellipse = new Ellipse2D.Float();
   private Line2D.Float line = new Line2D.Float();
   private Rectangle2D.Float rect = new Rectangle2D.Float();
+  private RoundRectangle2D.Float roundRect = new RoundRectangle2D.Float();
 
   JavaCanvas(Graphics2D graphics, int width, int height) {
     this.gfx = graphics;
@@ -54,6 +63,14 @@ class JavaCanvas implements Canvas {
     gfx.setBackground(new Color(0, true));
   }
 
+  public boolean dirty() {
+    return isDirty;
+  }
+
+  public void clearDirty() {
+    isDirty = false;
+  }
+
   public float alpha() {
     return currentState().alpha;
   }
@@ -61,6 +78,7 @@ class JavaCanvas implements Canvas {
   @Override
   public Canvas clear() {
     gfx.clearRect(0, 0, width, height);
+    isDirty = true;
     return this;
   }
 
@@ -76,46 +94,39 @@ class JavaCanvas implements Canvas {
   }
 
   @Override
-  public Canvas drawImage(Image img, float x, float y) {
-    Asserts.checkArgument(img instanceof JavaImage);
-    JavaImage jimg = (JavaImage) img;
+  public Path createPath() {
+    return new JavaPath();
+  }
 
-    currentState().prepareFill(gfx);
-    int dx = (int) x, dy = (int) y, w = jimg.width(), h = jimg.height();
-    gfx.drawImage(jimg.img, dx, dy, dx + w, dy + h, 0, 0, w, h, null);
-    return this;
+  @Override
+  public Canvas drawImage(Image img, float x, float y) {
+    int w = img.width(), h = img.height();
+    return drawImage(img, x, y, w, h);
   }
 
   @Override
   public Canvas drawImageCentered(Image img, float x, float y) {
-    drawImage(img, x - img.width()/2, y - img.height()/2);
-    return this;
+    return drawImage(img, x - img.width()/2, y - img.height()/2);
   }
 
   @Override
   public Canvas drawImage(Image img, float x, float y, float w, float h) {
-    Asserts.checkArgument(img instanceof JavaImage);
-    JavaImage jimg = (JavaImage) img;
-
-    // For non-integer scaling, we have to use AffineTransform.
-    AffineTransform tx = new AffineTransform(w / jimg.width(), 0f, 0f, h / jimg.height(), x, y);
-
+    Asserts.checkArgument(img instanceof Drawable);
+    Drawable d = (Drawable) img;
     currentState().prepareFill(gfx);
-    gfx.drawImage(jimg.img, tx, null);
+    d.draw(gfx, x, y, w, h);
+    isDirty = true;
     return this;
   }
 
   @Override
   public Canvas drawImage(Image img, float dx, float dy, float dw, float dh,
-                        float sx, float sy, float sw, float sh) {
-    Asserts.checkArgument(img instanceof JavaImage);
-    JavaImage jimg = (JavaImage) img;
-
-    // TODO: use AffineTransform here as well?
-
+                          float sx, float sy, float sw, float sh) {
+    Asserts.checkArgument(img instanceof Drawable);
+    Drawable d = (Drawable) img;
     currentState().prepareFill(gfx);
-    gfx.drawImage(jimg.img, (int)dx, (int)dy, (int)(dx + dw), (int)(dy + dh),
-                  (int)sx, (int)sy, (int)(sx + sw), (int)(sy + sh), null);
+    d.draw(gfx, dx, dy, dw, dh, sx, sy, sw, sh);
+    isDirty = true;
     return this;
   }
 
@@ -124,6 +135,7 @@ class JavaCanvas implements Canvas {
     currentState().prepareStroke(gfx);
     line.setLine(x0, y0, x1, y1);
     gfx.draw(line);
+    isDirty = true;
     return this;
   }
 
@@ -131,6 +143,7 @@ class JavaCanvas implements Canvas {
   public Canvas drawPoint(float x, float y) {
     currentState().prepareStroke(gfx);
     gfx.drawLine((int) x, (int) y, (int) x, (int) y);
+    isDirty = true;
     return this;
   }
 
@@ -138,6 +151,7 @@ class JavaCanvas implements Canvas {
   public Canvas drawText(String text, float x, float y) {
     currentState().prepareFill(gfx);
     gfx.drawString(text, x, y);
+    isDirty = true;
     return this;
   }
 
@@ -145,6 +159,7 @@ class JavaCanvas implements Canvas {
   public Canvas drawText(TextLayout layout, float x, float y) {
     currentState().prepareFill(gfx);
     ((JavaTextLayout)layout).paint(gfx, x, y);
+    isDirty = true;
     return this;
   }
 
@@ -153,6 +168,7 @@ class JavaCanvas implements Canvas {
     currentState().prepareFill(gfx);
     ellipse.setFrame(x - radius, y - radius, 2 * radius, 2 * radius);
     gfx.fill(ellipse);
+    isDirty = true;
     return this;
   }
 
@@ -162,6 +178,7 @@ class JavaCanvas implements Canvas {
 
     currentState().prepareFill(gfx);
     gfx.fill(((JavaPath) path).path);
+    isDirty = true;
     return this;
   }
 
@@ -170,6 +187,16 @@ class JavaCanvas implements Canvas {
     currentState().prepareFill(gfx);
     rect.setRect(x, y, width, height);
     gfx.fill(rect);
+    isDirty = true;
+    return this;
+  }
+
+  @Override
+  public Canvas fillRoundRect(float x, float y, float width, float height, float radius) {
+    currentState().prepareFill(gfx);
+    roundRect.setRoundRect(x, y, width, height, radius*2, radius*2);
+    gfx.fill(roundRect);
+    isDirty = true;
     return this;
   }
 
@@ -287,6 +314,7 @@ class JavaCanvas implements Canvas {
     currentState().prepareStroke(gfx);
     ellipse.setFrame(x - radius, y - radius, 2 * radius, 2 * radius);
     gfx.draw(ellipse);
+    isDirty = true;
     return this;
   }
 
@@ -295,6 +323,7 @@ class JavaCanvas implements Canvas {
     currentState().prepareStroke(gfx);
     gfx.setColor(new Color(currentState().strokeColor, false));
     gfx.draw(((JavaPath) path).path);
+    isDirty = true;
     return this;
   }
 
@@ -303,6 +332,16 @@ class JavaCanvas implements Canvas {
     currentState().prepareStroke(gfx);
     rect.setRect(x, y, width, height);
     gfx.draw(rect);
+    isDirty = true;
+    return this;
+  }
+
+  @Override
+  public Canvas strokeRoundRect(float x, float y, float width, float height, float radius) {
+    currentState().prepareStroke(gfx);
+    roundRect.setRoundRect(x, y, width, height, radius*2, radius*2);
+    gfx.draw(roundRect);
+    isDirty = true;
     return this;
   }
 

@@ -10,7 +10,7 @@
   <groupId>com.googlecode.playn</groupId>
   <artifactId>playn-project</artifactId>
   <packaging>pom</packaging>
-  <version>1.2-SNAPSHOT</version>
+  <version>1.3-SNAPSHOT</version>
   <name>PlayN Project</name>
   <url>http://code.google.com/p/playn</url>
   <description>Cross platform game library for N≥4 platforms.</description>
@@ -48,6 +48,7 @@
     <android.maven.version>3.1.1</android.maven.version>
     <monotouch.version>5.1</monotouch.version>
     <gwt.version>2.4.0</gwt.version>
+    <lwjgl.version>2.8.3</lwjgl.version>
     <!--
       GWT log levels:
       ERROR, WARN, INFO, TRACE, DEBUG, SPAM, or ALL
@@ -56,7 +57,6 @@
     <gwt.outputstyle>PRETTY</gwt.outputstyle>
     <gwt.modulesuffix />
     <gwt.inplace>false</gwt.inplace>
-    <gwt.soyc>false</gwt.soyc>
     <gwt.xdisable>true</gwt.xdisable>
     <gwt.draft>false</gwt.draft>
     <gwt.workers />
@@ -105,7 +105,6 @@
             <disableCastChecking>${gwt.xdisable}</disableCastChecking>
             <disableClassMetadata>${gwt.xdisable}</disableClassMetadata>
             <disableRunAsync>true</disableRunAsync>
-            <soyc>${gwt.soyc}</soyc>
             <localWorkers>${gwt.workers}</localWorkers>
             <extraJvmArgs>-Xmx256m</extraJvmArgs>
             <modules>
@@ -149,7 +148,7 @@
           <version>2.1.2</version>
         </plugin>
 
-	<plugin>
+        <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
           <version>2.3</version>
@@ -242,7 +241,6 @@
         <gwt.loglevel>ERROR</gwt.loglevel>
         <gwt.outputstyle>OBF</gwt.outputstyle>
         <gwt.xdisable>true</gwt.xdisable>
-        <gwt.soyc>true</gwt.soyc>
       </properties>
     </profile>
 

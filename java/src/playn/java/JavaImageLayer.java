@@ -29,7 +29,6 @@ class JavaImageLayer extends JavaLayer implements ImageLayer {
   private float width, height;
   private boolean widthSet, heightSet;
   private float sx, sy, sw, sh;
-  private boolean sourceRectSet;
   private boolean repeatX, repeatY;
 
   private JavaImage image;
@@ -50,9 +49,11 @@ class JavaImageLayer extends JavaLayer implements ImageLayer {
     heightSet = false;
   }
 
-  @Override
+  @Override @Deprecated
   public void clearSourceRect() {
-    sourceRectSet = false;
+    if (image instanceof Image.Region) {
+      setImage(((Image.Region) image).parent());
+    }
   }
 
   @Override
@@ -85,8 +86,6 @@ class JavaImageLayer extends JavaLayer implements ImageLayer {
 
   @Override
   public void setRepeatX(boolean repeat) {
-    Asserts.checkArgument(!repeat || !sourceRectSet, "Cannot repeat when source rect is used");
-
     if (repeatX != repeat) {
       repeatX = repeat;
       dirty = true;
@@ -95,23 +94,16 @@ class JavaImageLayer extends JavaLayer implements ImageLayer {
 
   @Override
   public void setRepeatY(boolean repeat) {
-    Asserts.checkArgument(!repeat || !sourceRectSet, "Cannot repeat when source rect is used");
-
     if (repeatY != repeat) {
       repeatY = repeat;
       dirty = true;
     }
   }
 
-  @Override
+  @Override @Deprecated
   public void setSourceRect(float sx, float sy, float sw, float sh) {
-    Asserts.checkState(!repeatX && !repeatY, "Cannot use source rect when repeating x or y");
-
-    sourceRectSet = true;
-    this.sx = sx;
-    this.sy = sy;
-    this.sw = sw;
-    this.sh = sh;
+    Image source = (image instanceof Image.Region) ? ((Image.Region)image).parent() : image;
+    setImage(source.subImage(sx, sy, sw, sh));
   }
 
   @Override
@@ -150,27 +142,21 @@ class JavaImageLayer extends JavaLayer implements ImageLayer {
     transform(canvas);
     canvas.setAlpha(canvas.alpha() * alpha);
 
-    float dw = widthSet ? width : image.width();
-    float dh = heightSet ? height : image.height();
-
+    float dw = width(), dh = height();
     if (repeatX || repeatY) {
       if (dirty) {
         // repaint repeated image onto cached image
         cachedImage = (JavaCanvasImage) graphics().createImage((int) dw, (int) dh);
-
         float anchorWidth = repeatX ? image.width() : dw;
         float anchorHeight = repeatY ? image.height() : dh;
-        TexturePaint tpaint =
-            new TexturePaint(image.img, new Rectangle2D.Float(0, 0, anchorWidth, anchorHeight));
+        TexturePaint tpaint = ((JavaPattern) image.toPattern()).paint;
         ((JavaCanvas) cachedImage.canvas()).gfx.setPaint(tpaint);
         ((JavaCanvas) cachedImage.canvas()).gfx.fill(new Rectangle2D.Float(0, 0, dw, dh));
-
         dirty = false;
       }
-
       canvas.drawImage(cachedImage, 0, 0);
-    } else if (sourceRectSet) {
-      canvas.drawImage(image, 0, 0, dw, dh, sx, sy, sw, sh);
+    } else if (widthSet || heightSet) {
+      canvas.drawImage(image, 0, 0, dw, dh);
     } else {
       canvas.drawImage(image, 0, 0);
     }
@@ -181,21 +167,13 @@ class JavaImageLayer extends JavaLayer implements ImageLayer {
   @Override
   public float width() {
     Asserts.checkNotNull(image, "Image must not be null");
-    if (widthSet) {
-      return width;
-    } else {
-      return image.width();
-    }
+    return widthSet ? width : image.width();
   }
 
   @Override
   public float height() {
     Asserts.checkNotNull(image, "Image must not be null");
-    if (heightSet) {
-      return height;
-    } else {
-      return image.height();
-    }
+    return heightSet ? height : image.height();
   }
 
   @Override

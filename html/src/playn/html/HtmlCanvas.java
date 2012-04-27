@@ -29,6 +29,12 @@ import playn.core.TextLayout;
 
 class HtmlCanvas implements Canvas {
 
+  interface Drawable {
+    void draw(Context2d ctx, float x, float y, float width, float height);
+    void draw(Context2d ctx, float sx, float sy, float sw, float sh,
+              float dx, float dy, float dw, float dh);
+  }
+
   private final CanvasElement canvas;
   private final Context2d ctx;
   private final int width, height;
@@ -71,17 +77,19 @@ class HtmlCanvas implements Canvas {
   }
 
   @Override
+  public Path createPath() {
+    return new HtmlPath();
+  }
+
+  @Override
   public Canvas drawImage(Image img, float x, float y) {
-    Asserts.checkArgument(img instanceof HtmlImage);
-    ctx.drawImage(((HtmlImage) img).img, x, y);
-    dirty = true;
-    return this;
+    return drawImage(img, x, y, img.width(), img.height());
   }
 
   @Override
   public Canvas drawImage(Image img, float x, float y, float w, float h) {
-    Asserts.checkArgument(img instanceof HtmlImage);
-    ctx.drawImage(((HtmlImage) img).img, x, y, w, h);
+    Asserts.checkArgument(img instanceof Drawable);
+    ((Drawable) img).draw(ctx, x, y, w, h);
     dirty = true;
     return this;
   }
@@ -89,9 +97,8 @@ class HtmlCanvas implements Canvas {
   @Override
   public Canvas drawImage(Image img, float dx, float dy, float dw, float dh,
       float sx, float sy, float sw, float sh) {
-    Asserts.checkArgument(img instanceof HtmlImage);
-    ctx.drawImage(((HtmlImage) img).img, sx, sy, sw, sh, dx,
-        dy, dw, dh);
+    Asserts.checkArgument(img instanceof Drawable);
+    ((Drawable) img).draw(ctx, sx, sy, sw, sh, dx, dy, dw, dh);
     dirty = true;
     return this;
   }
@@ -163,6 +170,14 @@ class HtmlCanvas implements Canvas {
   }
 
   @Override
+  public Canvas fillRoundRect(float x, float y, float w, float h, float radius) {
+    addRoundRectPath(x, y, width, height, radius);
+    ctx.fill();
+    dirty = true;
+    return this;
+  }
+
+  @Override
   public final int height() {
     return height;
   }
@@ -219,7 +234,7 @@ class HtmlCanvas implements Canvas {
   @Override
   public Canvas setFillPattern(Pattern pattern) {
     Asserts.checkArgument(pattern instanceof HtmlPattern);
-    ctx.setFillStyle(((HtmlPattern) pattern).pattern);
+    ctx.setFillStyle(((HtmlPattern) pattern).pattern(ctx));
     return this;
   }
 
@@ -285,6 +300,14 @@ class HtmlCanvas implements Canvas {
   }
 
   @Override
+  public Canvas strokeRoundRect(float x, float y, float w, float h, float radius) {
+    addRoundRectPath(x, y, width, height, radius);
+    ctx.stroke();
+    dirty = true;
+    return this;
+  }
+
+  @Override
   public Canvas transform(float m11, float m12, float m21, float m22, float dx,
       float dy) {
     ctx.transform(m11, m12, m21, m22, dx, dy);
@@ -312,6 +335,17 @@ class HtmlCanvas implements Canvas {
 
   boolean dirty() {
     return dirty;
+  }
+
+  private void addRoundRectPath(float x, float y, float width, float height, float radius) {
+    float midx = x + width/2, midy = y + height/2, maxx = x + width, maxy = y + height;
+    ctx.beginPath();
+    ctx.moveTo(x, midy);
+    ctx.arcTo(x, y, midx, y, radius);
+    ctx.arcTo(maxx, y, maxx, midy, radius);
+    ctx.arcTo(maxx, maxy, midx, maxy, radius);
+    ctx.arcTo(x, maxy, x, midy, radius);
+    ctx.closePath();
   }
 
   private String convertComposite(Canvas.Composite composite) {

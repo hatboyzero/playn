@@ -40,7 +40,14 @@ import playn.core.TextLayout;
  */
 public class IOSCanvas implements Canvas
 {
+  interface Drawable {
+    void draw(CGBitmapContext bctx, float dx, float dy, float dw, float dh);
+    void draw(CGBitmapContext bctx, float sx, float sy, float sw, float sh,
+              float dx, float dy, float dw, float dh);
+  }
+
   private final int width, height;
+  private final int texWidth, texHeight;
 
   private boolean isDirty;
   private IntPtr data;
@@ -48,22 +55,24 @@ public class IOSCanvas implements Canvas
 
   private LinkedList<IOSCanvasState> states = new LinkedList<IOSCanvasState>();
 
-  IOSCanvas(int width, int height) {
+  public IOSCanvas(IOSGLContext ctx, int width, int height) {
     this.width = width;
     this.height = height;
     states.addFirst(new IOSCanvasState());
 
     // create our raw image data
-    data = Marshal.AllocHGlobal(width * height * 4);
+    texWidth = ctx.scaledCeil(width);
+    texHeight = ctx.scaledCeil(height);
+    data = Marshal.AllocHGlobal(texWidth * texHeight * 4);
 
     // create the bitmap context via which we'll render into it
     bctx = new CGBitmapContext(
-      data, width, height, 8, 4 * width, IOSGraphics.colorSpace,
+      data, texWidth, texHeight, 8, 4 * texWidth, IOSGraphics.colorSpace,
       CGImageAlphaInfo.wrap(CGImageAlphaInfo.PremultipliedLast));
 
-    // // CG coordinate system is OpenGL-style (0,0 in lower left); so we flip it
-    bctx.TranslateCTM(0, height);
-    bctx.ScaleCTM(1, -1);
+    // CG coordinate system is OpenGL-style (0,0 in lower left); so we flip it
+    bctx.TranslateCTM(0, ctx.scaled(height));
+    bctx.ScaleCTM(ctx.scaleFactor, -ctx.scaleFactor);
 
     // clear the canvas to start
     clear();
@@ -71,6 +80,20 @@ public class IOSCanvas implements Canvas
 
   public IntPtr data() {
     return data;
+  }
+
+  public int texWidth() {
+    return texWidth;
+  }
+
+  public int texHeight() {
+    return texHeight;
+  }
+
+  public CGImage cgImage() {
+    // TODO: make sure the image created by this call doesn't require any manual resource
+    // releasing, other than being eventually garbage collected
+    return bctx.ToImage();
   }
 
   public boolean dirty() {
@@ -113,6 +136,11 @@ public class IOSCanvas implements Canvas
   }
 
   @Override
+  public Path createPath() {
+    return new IOSPath();
+  }
+
+  @Override
   public Canvas drawImage(Image image, float dx, float dy) {
     return drawImage(image, dx, dy, image.width(), image.height());
   }
@@ -124,15 +152,7 @@ public class IOSCanvas implements Canvas
 
   @Override
   public Canvas drawImage(Image image, float dx, float dy, float dw, float dh) {
-    CGImage cgImage = ((IOSAbstractImage) image).cgImage();
-    // pesky fiddling to cope with the fact that UIImages are flipped; TODO: make sure drawing a
-    // canvas image on a canvas image does the right thing
-    dy += dh;
-    bctx.TranslateCTM(dx, dy);
-    bctx.ScaleCTM(1, -1);
-    bctx.DrawImage(new RectangleF(0, 0, dw, dh), cgImage);
-    bctx.ScaleCTM(1, -1);
-    bctx.TranslateCTM(-dx, -dy);
+    ((Drawable) image).draw(bctx, dx, dy, dw, dh);
     isDirty = true;
     return this;
   }
@@ -140,19 +160,7 @@ public class IOSCanvas implements Canvas
   @Override
   public Canvas drawImage(Image image, float dx, float dy, float dw, float dh,
                           float sx, float sy, float sw, float sh) {
-    CGImage cgImage = ((IOSAbstractImage) image).cgImage();
-    float iw = cgImage.get_Width(), ih = cgImage.get_Height();
-    float scaleX = dw/sw, scaleY = dh/sh;
-
-    // pesky fiddling to cope with the fact that UIImages are flipped; TODO: make sure drawing a
-    // canvas image on a canvas image does the right thing
-    bctx.SaveState();
-    bctx.TranslateCTM(dx, dy+dh);
-    bctx.ScaleCTM(1, -1);
-    bctx.ClipToRect(new RectangleF(0, 0, dw, dh));
-    bctx.TranslateCTM(-sx*scaleX, -(ih-(sy+sh))*scaleY);
-    bctx.DrawImage(new RectangleF(0, 0, iw*scaleX, ih*scaleY), cgImage);
-    bctx.RestoreState();
+    ((Drawable) image).draw(bctx, dx, dy, dw, dh, sx, sy, sw, sh);
     isDirty = true;
     return this;
   }
@@ -174,7 +182,13 @@ public class IOSCanvas implements Canvas
 
   @Override
   public Canvas drawText(String text, float x, float y) {
-    bctx.ShowTextAtPoint(x, y, text);
+    bctx.SaveState();
+    bctx.TranslateCTM(x, y + IOSGraphics.defaultFont.ctFont.get_DescentMetric());
+    bctx.ScaleCTM(1, -1);
+    bctx.SelectFont(IOSGraphics.defaultFont.iosName(), IOSGraphics.defaultFont.size(),
+                    CGTextEncoding.wrap(CGTextEncoding.MacRoman));
+    bctx.ShowTextAtPoint(0, 0, text);
+    bctx.RestoreState();
     isDirty = true;
     return this;
   }
@@ -223,6 +237,20 @@ public class IOSCanvas implements Canvas
       bctx.ClipToRect(new RectangleF(x, y, width, height));
       gradient.fill(bctx);
       bctx.RestoreState();
+    }
+    isDirty = true;
+    return this;
+  }
+
+  @Override
+  public Canvas fillRoundRect(float x, float y, float width, float height, float radius) {
+    addRoundRectPath(x, y, width, height, radius);
+    IOSGradient gradient = currentState().gradient;
+    if (gradient == null) {
+      bctx.FillPath();
+    } else {
+      bctx.Clip();
+      gradient.fill(bctx);
     }
     isDirty = true;
     return this;
@@ -346,6 +374,14 @@ public class IOSCanvas implements Canvas
   }
 
   @Override
+  public Canvas strokeRoundRect(float x, float y, float width, float height, float radius) {
+    addRoundRectPath(x, y, width, height, radius);
+    bctx.StrokePath();
+    isDirty = true;
+    return this;
+  }
+
+  @Override
   public Canvas transform(float m11, float m12, float m21, float m22, float dx, float dy) {
     // TODO
     return this;
@@ -355,6 +391,17 @@ public class IOSCanvas implements Canvas
   public Canvas translate(float x, float y) {
     bctx.TranslateCTM(x, y);
     return this;
+  }
+
+  private void addRoundRectPath(float x, float y, float width, float height, float radius) {
+    float midx = x + width/2, midy = y + height/2, maxx = x + width, maxy = y + height;
+    bctx.BeginPath();
+    bctx.MoveTo(x, midy);
+    bctx.AddArcToPoint(x, y, midx, y, radius);
+    bctx.AddArcToPoint(maxx, y, maxx, midy, radius);
+    bctx.AddArcToPoint(maxx, maxy, midx, maxy, radius);
+    bctx.AddArcToPoint(x, maxy, x, midy, radius);
+    bctx.ClosePath();
   }
 
   private IOSCanvasState currentState() {

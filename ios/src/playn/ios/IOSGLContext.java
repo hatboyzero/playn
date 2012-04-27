@@ -15,9 +15,6 @@
  */
 package playn.ios;
 
-import java.util.HashSet;
-import java.util.Set;
-
 import cli.System.Drawing.RectangleF;
 import cli.System.IntPtr;
 import cli.System.Runtime.InteropServices.Marshal;
@@ -30,99 +27,33 @@ import cli.MonoTouch.UIKit.UIImage;
 import cli.OpenTK.Graphics.ES20.All;
 import cli.OpenTK.Graphics.ES20.GL;
 
-import pythagoras.f.FloatMath;
-
 import playn.core.InternalTransform;
 import playn.core.PlayN;
-import playn.core.StockInternalTransform;
 import playn.core.gl.GLContext;
+import playn.core.gl.GLShader;
 import playn.core.gl.GroupLayerGL;
 
-class IOSGLContext extends GLContext
-{
-  public static final boolean CHECK_ERRORS = true;
+public class IOSGLContext extends GLContext {
 
-  public int viewWidth, viewHeight;
+  public static final boolean CHECK_ERRORS = false;
 
-  int fbufWidth, fbufHeight;
-  private int lastFrameBuffer;
-  private InternalTransform rootTransform = StockInternalTransform.IDENTITY;
-  private Set<Integer> supportedOrients = new HashSet<Integer>();
+  int orient;
 
-  IOSGLContext(int screenWidth, int screenHeight) {
-    fbufWidth = viewWidth = screenWidth;
-    fbufHeight = viewHeight = screenHeight;
+  private GLShader.Texture texShader;
+  private GLShader.Color colorShader;
+
+  public IOSGLContext(float scaleFactor, int screenWidth, int screenHeight) {
+    super(scaleFactor);
+    setSize(screenWidth, screenHeight);
   }
 
-  void init() {
+  public void init() {
     reinitGL();
-  }
-
-  void setSupportedOrientations(boolean portrait, boolean landscapeRight,
-                                boolean upsideDown, boolean landscapeLeft) {
-    supportedOrients.clear();
-    if (portrait)
-      supportedOrients.add(UIDeviceOrientation.Portrait);
-    if (landscapeRight)
-      supportedOrients.add(UIDeviceOrientation.LandscapeRight);
-    if (landscapeLeft)
-      supportedOrients.add(UIDeviceOrientation.LandscapeLeft);
-    if (upsideDown)
-      supportedOrients.add(UIDeviceOrientation.PortraitUpsideDown);
-  }
-
-  boolean setOrientation(UIDeviceOrientation orientation) {
-    if (!supportedOrients.contains(orientation.Value))
-      return false;
-    switch (orientation.Value) {
-    case UIDeviceOrientation.Portrait:
-      rootTransform = StockInternalTransform.IDENTITY;
-      break;
-    case UIDeviceOrientation.PortraitUpsideDown:
-      rootTransform = new StockInternalTransform();
-      rootTransform.translate(-viewWidth, -viewHeight);
-      rootTransform.scale(-1, -1);
-      break;
-    case UIDeviceOrientation.LandscapeLeft:
-      rootTransform = new StockInternalTransform();
-      rootTransform.rotate(FloatMath.PI/2);
-      rootTransform.translate(0, -viewWidth);
-      break;
-    case UIDeviceOrientation.LandscapeRight:
-      rootTransform = new StockInternalTransform();
-      rootTransform.rotate(-FloatMath.PI/2);
-      rootTransform.translate(-viewHeight, 0);
-      break;
-    }
-    return true;
-  }
-
-  @Override
-  public Integer createFramebuffer(Object tex) {
-    int[] fbufw = new int[1];
-    GL.GenFramebuffers(1, fbufw);
-
-    int fbuf = fbufw[0];
-    GL.BindFramebuffer(All.wrap(All.Framebuffer), fbuf);
-    GL.FramebufferTexture2D(All.wrap(All.Framebuffer), All.wrap(All.ColorAttachment0),
-                            All.wrap(All.Texture2D), (Integer) tex, 0);
-
-    return fbuf;
   }
 
   @Override
   public void deleteFramebuffer(Object fbuf) {
     GL.DeleteFramebuffers(1, new int[] { (Integer) fbuf });
-  }
-
-  @Override
-  public void bindFramebuffer(Object fbuf, int width, int height) {
-    bindFramebuffer((Integer)fbuf, width, height, false);
-  }
-
-  @Override
-  public void bindFramebuffer() {
-    bindFramebuffer(0, viewWidth, viewHeight, false);
   }
 
   @Override
@@ -156,7 +87,22 @@ class IOSGLContext extends GLContext
   @Override
   public void startClipped(int x, int y, int width, int height) {
     flush(); // flush any pending unclipped calls
-    GL.Scissor(x, fbufHeight-y-height, width, height);
+    switch (orient) {
+    default:
+    case UIDeviceOrientation.Portrait:
+      GL.Scissor(x, curFbufHeight-y-height, width, height);
+      break;
+    case UIDeviceOrientation.PortraitUpsideDown:
+      GL.Scissor(x-width, curFbufHeight-y, width, height);
+      break;
+    case UIDeviceOrientation.LandscapeLeft:
+      GL.Scissor(x-width, curFbufHeight-y-height, width, height);
+      break;
+    case UIDeviceOrientation.LandscapeRight:
+      GL.Scissor(x, curFbufHeight-y, width, height);
+      break;
+    }
+    checkGLError("GL.Scissor");
     GL.Enable(All.wrap(All.ScissorTest));
   }
 
@@ -182,17 +128,44 @@ class IOSGLContext extends GLContext
     }
   }
 
-  void bindFramebuffer(int frameBuffer, int width, int height, boolean force) {
-    if (force || lastFrameBuffer != frameBuffer) {
-      checkGLError("bindFramebuffer");
-      flush();
+  @Override
+  protected Object defaultFrameBuffer() {
+    return 0;
+  }
 
-      lastFrameBuffer = frameBuffer;
-      GL.BindFramebuffer(All.wrap(All.Framebuffer), frameBuffer);
-      GL.Viewport(0, 0, width, height);
-      fbufWidth = width;
-      fbufHeight = height;
-    }
+  @Override
+  protected Integer createFramebufferImpl(Object tex) {
+    int[] fbufw = new int[1];
+    GL.GenFramebuffers(1, fbufw);
+
+    int fbuf = fbufw[0];
+    GL.BindFramebuffer(All.wrap(All.Framebuffer), fbuf);
+    GL.FramebufferTexture2D(All.wrap(All.Framebuffer), All.wrap(All.ColorAttachment0),
+                            All.wrap(All.Texture2D), (Integer) tex, 0);
+    return fbuf;
+  }
+
+  @Override
+  protected void bindFramebufferImpl(Object frameBuffer, int width, int height) {
+    GL.BindFramebuffer(All.wrap(All.Framebuffer), (Integer) frameBuffer);
+    GL.Viewport(0, 0, width, height);
+  }
+
+  @Override
+  protected GLShader.Texture quadTexShader() {
+    return texShader;
+  }
+  @Override
+  protected GLShader.Texture trisTexShader() {
+    return texShader;
+  }
+  @Override
+  protected GLShader.Color quadColorShader() {
+    return colorShader;
+  }
+  @Override
+  protected GLShader.Color trisColorShader() {
+    return colorShader;
   }
 
   void updateTexture(int tex, UIImage image) {
@@ -223,10 +196,16 @@ class IOSGLContext extends GLContext
                   All.wrap(All.UnsignedByte), data);
   }
 
-  void paintLayers(GroupLayerGL rootLayer) {
-    checkGLError("updateLayers start");
+  void preparePaint() {
+    checkGLError("preparePaint start");
     bindFramebuffer();
     GL.Clear(All.ColorBufferBit | All.DepthBufferBit); // clear to transparent
+    checkGLError("preparePaint end");
+  }
+
+  void paintLayers(InternalTransform rootTransform, GroupLayerGL rootLayer) {
+    checkGLError("updateLayers start");
+    bindFramebuffer();
     rootLayer.paint(rootTransform, 1); // paint all the layers
     checkGLError("updateLayers end");
     useShader(null); // guarantee a flush

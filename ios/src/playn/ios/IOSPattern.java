@@ -16,17 +16,22 @@
 package playn.ios;
 
 import cli.MonoTouch.CoreGraphics.CGColor;
-import cli.MonoTouch.UIKit.UIColor;
-import cli.MonoTouch.UIKit.UIImage;
 
-import playn.core.Pattern;
+import playn.core.gl.GLPattern;
+import playn.core.gl.ImageGL;
 
-class IOSPattern implements Pattern
+public class IOSPattern implements GLPattern
 {
   CGColor colorWithPattern;
+  private ImageGL image;
 
-  IOSPattern(IOSAbstractImage image) {
-    // this is a circuitous route, but I'm not savvy enough to find a more direct one
-    colorWithPattern = UIColor.FromPatternImage(new UIImage(image.cgImage())).get_CGColor();
+  public IOSPattern(ImageGL image, CGColor colorWithPattern) {
+    this.image = image;
+    this.colorWithPattern = colorWithPattern;
+  }
+
+  @Override
+  public ImageGL image() {
+    return image;
   }
 }

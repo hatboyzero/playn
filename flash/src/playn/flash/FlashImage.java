@@ -25,11 +25,16 @@ import playn.core.Image;
 import playn.core.ResourceCallback;
 import flash.display.BitmapData;
 
+import playn.core.Pattern;
+
 @FlashImport({"flash.display.Loader", "flash.events.Event", "flash.net.URLRequest"})
 class FlashImage implements Image {
-  private List<ResourceCallback<Image>> callbacks = new ArrayList<ResourceCallback<Image>>();
+
+  private List<ResourceCallback<? super Image>> callbacks =
+    new ArrayList<ResourceCallback<? super Image>>();
 
   private BitmapData imageData = null;
+
   FlashImage(String url) {
     scheduleLoad(url);
   }
@@ -38,9 +43,6 @@ class FlashImage implements Image {
     this.imageData = data;
   }
 
-  /**
-   * @param url
-   */
   private native void scheduleLoad(String url) /*-{
      var loader = new Loader();
      var self = this;
@@ -55,27 +57,13 @@ class FlashImage implements Image {
   }-*/;
 
   @Override
-  public int height() {
-    return imageData == null ? 0 : imageData.getHeight();
-  }
-
-  private void runCallbacks(boolean success) {
-    Iterator<ResourceCallback<Image>> it = callbacks.iterator();
-    while (it.hasNext()) {
-      ResourceCallback<Image> cb = it.next();
-      it.remove();
-      if (success) {
-        cb.done(this);
-      } else {
-        cb.error(new Exception("Error loading image"));
-      }
-    }
-    callbacks.clear();
+  public int width() {
+    return imageData == null ? 0 : imageData.getWidth();
   }
 
   @Override
-  public int width() {
-    return imageData == null ? 0 : imageData.getWidth();
+  public int height() {
+    return imageData == null ? 0 : imageData.getHeight();
   }
 
   @Override
@@ -83,22 +71,52 @@ class FlashImage implements Image {
     return imageData != null;
   }
 
-  /* (non-Javadoc)
-   * @see playn.core.Image#addCallback(playn.core.ResourceCallback)
-   */
   @Override
-  public void addCallback(ResourceCallback<Image> callback) {
+  public void addCallback(ResourceCallback<? super Image> callback) {
     callbacks.add(callback);
     if (isReady()) {
       runCallbacks(true);
     }
   }
 
-  /**
-   * @return
-   */
+  @Override
+  public Region subImage(float x, float y, float width, float height) {
+    return new FlashImageRegion(this, x, y, width, height);
+  }
+
+  @Override
+  public Pattern toPattern() {
+    return new FlashPattern(this);
+  }
+
+  @Override
+  public void getRgb(int startX, int startY, int width, int height, int[] rgbArray, int offset,
+                     int scanSize) {
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        rgbArray[offset + x] = imageData.getPixel32(startX + x, startY + y);
+      }
+      offset += scanSize;
+    }
+  }
+
+  @Override
+  public Image transform(BitmapTransformer xform) {
+    return new FlashImage(((FlashBitmapTransformer) xform).transform(imageData));
+  }
+
   BitmapData bitmapData() {
-    // TODO Auto-generated method stub
     return imageData;
+  }
+
+  private void runCallbacks(boolean success) {
+    for (ResourceCallback<? super Image> cb : callbacks) {
+      if (success) {
+        cb.done(this);
+      } else {
+        cb.error(new Exception("Error loading image"));
+      }
+    }
+    callbacks.clear();
   }
 }

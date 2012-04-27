@@ -16,6 +16,7 @@
 package playn.android;
 
 import static playn.core.PlayN.log;
+import playn.core.gl.GLShader;
 
 import java.util.*;
 
@@ -42,11 +43,10 @@ public class AndroidGLContext extends GLContext
     void onSurfaceCreated();
   }
 
-  public static final boolean CHECK_ERRORS = true;
+  public static final boolean CHECK_ERRORS = false;
 
-  public int viewWidth, viewHeight;
-  int fbufWidth, fbufHeight;
-  private int lastFrameBuffer;
+  private GLShader.Texture texShader;
+  private GLShader.Color colorShader;
 
   final AndroidGL20 gl20;
 
@@ -56,17 +56,11 @@ public class AndroidGLContext extends GLContext
   // Debug
   private int texCount;
 
-  AndroidGLContext(AndroidGL20 gfx, int screenWidth, int screenHeight) {
+  AndroidGLContext(float scaleFactor, AndroidGL20 gfx, int screenWidth, int screenHeight) {
+    super(scaleFactor);
     gl20 = gfx;
-    fbufWidth = viewWidth = screenWidth;
-    fbufHeight = viewHeight = screenHeight;
+    setSize(screenWidth, screenHeight);
     reinitGL();
-  }
-
-  void setSize(int width, int height) {
-    viewWidth = width;
-    viewHeight = height;
-    bindFramebuffer(0, width, height, true);
   }
 
   void onSurfaceCreated() {
@@ -82,18 +76,18 @@ public class AndroidGLContext extends GLContext
     }
   }
 
-  void paintLayers(GroupLayerGL rootLayer) {
-    // Bind the default frameBuffer (the SurfaceView's Surface)
-    checkGLError("updateLayers Start");
-
-    bindFramebuffer();
-
+  void preparePaint() {
     // Clear to transparent
+    bindFramebuffer();
     gl20.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
-    // Paint all the layers
-    rootLayer.paint(StockInternalTransform.IDENTITY, 1);
-    checkGLError("updateLayers");
+  }
 
+  void paintLayers(GroupLayerGL rootLayer) {
+    checkGLError("updateLayers start");
+    // Paint all the layers
+    bindFramebuffer();
+    rootLayer.paint(StockInternalTransform.IDENTITY, 1);
+    checkGLError("updateLayers end");
     // Guarantee a flush
     useShader(null);
   }
@@ -105,45 +99,8 @@ public class AndroidGLContext extends GLContext
   }
 
   @Override
-  public Integer createFramebuffer(Object tex) {
-    // Generate the framebuffer and attach the texture
-    int[] fbufBuffer = new int[1];
-    gl20.glGenFramebuffers(1, fbufBuffer, 0);
-
-    int fbuf = fbufBuffer[0];
-    gl20.glBindFramebuffer(GL20.GL_FRAMEBUFFER, fbuf);
-    gl20.glFramebufferTexture2D(GL20.GL_FRAMEBUFFER, GL20.GL_COLOR_ATTACHMENT0,
-                                GL20.GL_TEXTURE_2D, (Integer) tex, 0);
-
-    return fbuf;
-  }
-
-  @Override
   public void deleteFramebuffer(Object fbuf) {
     gl20.glDeleteFramebuffers(1, new int[] {(Integer) fbuf}, 0);
-  }
-
-  @Override
-  public void bindFramebuffer(Object fbuf, int width, int height) {
-    bindFramebuffer((Integer)fbuf, width, height, false);
-  }
-
-  @Override
-  public void bindFramebuffer() {
-    bindFramebuffer(0, viewWidth, viewHeight, false);
-  }
-
-  void bindFramebuffer(int frameBuffer, int width, int height, boolean force) {
-    if (force || lastFrameBuffer != frameBuffer) {
-      checkGLError("bindFramebuffer");
-      flush();
-
-      lastFrameBuffer = frameBuffer;
-      gl20.glBindFramebuffer(GL20.GL_FRAMEBUFFER, frameBuffer);
-      gl20.glViewport(0, 0, width, height);
-      fbufWidth = width;
-      fbufHeight = height;
-    }
   }
 
   @Override
@@ -182,7 +139,7 @@ public class AndroidGLContext extends GLContext
   @Override
   public void startClipped(int x, int y, int width, int height) {
     flush(); // flush any pending unclipped calls
-    gl20.glScissor(x, fbufHeight-y-height, width, height);
+    gl20.glScissor(x, curFbufHeight-y-height, width, height);
     gl20.glEnable(GL20.GL_SCISSOR_TEST);
   }
 
@@ -199,15 +156,6 @@ public class AndroidGLContext extends GLContext
   }
 
   @Override
-  public void flush() {
-    if (curShader != null) {
-      checkGLError("flush()");
-      curShader.flush();
-      curShader = null;
-    }
-  }
-
-  @Override
   public void checkGLError(String op) {
     if (CHECK_ERRORS) {
       int error;
@@ -215,6 +163,47 @@ public class AndroidGLContext extends GLContext
         log().error(this.getClass().getName() + " -- " + op + ": glError " + error);
       }
     }
+  }
+
+  @Override
+  protected Object defaultFrameBuffer() {
+    return 0;
+  }
+
+  @Override
+  protected Integer createFramebufferImpl(Object tex) {
+    // Generate the framebuffer and attach the texture
+    int[] fbufBuffer = new int[1];
+    gl20.glGenFramebuffers(1, fbufBuffer, 0);
+
+    int fbuf = fbufBuffer[0];
+    gl20.glBindFramebuffer(GL20.GL_FRAMEBUFFER, fbuf);
+    gl20.glFramebufferTexture2D(GL20.GL_FRAMEBUFFER, GL20.GL_COLOR_ATTACHMENT0,
+                                GL20.GL_TEXTURE_2D, (Integer) tex, 0);
+    return fbuf;
+  }
+
+  @Override
+  protected void bindFramebufferImpl(Object frameBuffer, int width, int height) {
+    gl20.glBindFramebuffer(GL20.GL_FRAMEBUFFER, (Integer) frameBuffer);
+    gl20.glViewport(0, 0, width, height);
+  }
+
+  @Override
+  protected GLShader.Texture quadTexShader() {
+    return texShader;
+  }
+  @Override
+  protected GLShader.Texture trisTexShader() {
+    return texShader;
+  }
+  @Override
+  protected GLShader.Color quadColorShader() {
+    return colorShader;
+  }
+  @Override
+  protected GLShader.Color trisColorShader() {
+    return colorShader;
   }
 
   void addRefreshable(Refreshable ref) {

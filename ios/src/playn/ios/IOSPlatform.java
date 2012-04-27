@@ -15,12 +15,20 @@
  */
 package playn.ios;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import cli.System.Drawing.RectangleF;
+
 import cli.MonoTouch.Foundation.NSUrl;
 import cli.MonoTouch.UIKit.UIApplication;
+import cli.MonoTouch.UIKit.UIDeviceOrientation;
+import cli.MonoTouch.UIKit.UIInterfaceOrientation;
 import cli.MonoTouch.UIKit.UIScreen;
+import cli.MonoTouch.UIKit.UIViewController;
 import cli.MonoTouch.UIKit.UIWindow;
-import cli.System.DateTime;
-import cli.System.Drawing.RectangleF;
 
 import playn.core.Game;
 import playn.core.Json;
@@ -35,13 +43,55 @@ import playn.core.json.JsonImpl;
  */
 public class IOSPlatform implements Platform {
 
+  /** Defines the orientations supported by your app. */
+  public enum SupportedOrients {
+    /** Suports portrait and portrait upside down orients. */
+    PORTRAITS(UIDeviceOrientation.Portrait) {
+      @Override
+      public boolean isSupported(UIDeviceOrientation orient) {
+        return ((orient.Value == UIDeviceOrientation.Portrait) ||
+                (orient.Value == UIDeviceOrientation.PortraitUpsideDown));
+      }
+    },
+
+    /** Suports landscape left and right orients. */
+    LANDSCAPES(UIDeviceOrientation.LandscapeLeft) {
+      @Override
+      public boolean isSupported(UIDeviceOrientation orient) {
+        return ((orient.Value == UIDeviceOrientation.LandscapeLeft) ||
+                (orient.Value == UIDeviceOrientation.LandscapeRight));
+      }
+    },
+
+    /** Suports both portrait and landscape orients. */
+    ALL(UIDeviceOrientation.Portrait) {
+      @Override
+      public boolean isSupported(UIDeviceOrientation orient) {
+        return ((orient.Value == UIDeviceOrientation.Portrait) ||
+                (orient.Value == UIDeviceOrientation.PortraitUpsideDown) ||
+                (orient.Value == UIDeviceOrientation.LandscapeLeft) ||
+                (orient.Value == UIDeviceOrientation.LandscapeRight));
+      }
+    };
+
+    public final UIDeviceOrientation defaultOrient;
+
+    public abstract boolean isSupported(UIDeviceOrientation orient);
+
+    SupportedOrients(int defaultOrient) {
+      this.defaultOrient = UIDeviceOrientation.wrap(defaultOrient);
+    }
+  };
+
   public static IOSPlatform register(UIApplication app) {
-    IOSPlatform platform = new IOSPlatform(app);
+    return register(app, SupportedOrients.PORTRAITS);
+  }
+
+  public static IOSPlatform register(UIApplication app, SupportedOrients orients) {
+    IOSPlatform platform = new IOSPlatform(app, orients);
     PlayN.setPlatform(platform);
     return platform;
   }
-
-  static IOSPlatform instance;
 
   private IOSAudio audio;
   private IOSGraphics graphics;
@@ -58,40 +108,40 @@ public class IOSPlatform implements Platform {
   private Game game;
   private float accum, alpha;
 
+  private final SupportedOrients orients;
   private final UIApplication app;
   private final UIWindow mainWindow;
   private final IOSGameView gameView;
 
-  private IOSPlatform(UIApplication app) {
+  private final List<Runnable> pendingActions = new ArrayList<Runnable>();
+
+  protected IOSPlatform(UIApplication app, SupportedOrients orients) {
     this.app = app;
+    this.orients = orients;
+
     RectangleF bounds = UIScreen.get_MainScreen().get_Bounds();
-    float scale = 1f; // TODO: UIScreen.get_MainScreen().get_Scale();
+    float scale = UIScreen.get_MainScreen().get_Scale();
 
     // create log first so that other services can use it during initialization
     log = new IOSLog();
 
-    instance = this;
     audio = new IOSAudio();
     graphics = new IOSGraphics(bounds, scale);
     json = new JsonImpl();
     keyboard = new IOSKeyboard();
-    net = new IOSNet();
-    pointer = new IOSPointer();
-    touch = new IOSTouch();
-    assets = new IOSAssets();
+    net = new IOSNet(this);
+    pointer = new IOSPointer(graphics);
+    touch = new IOSTouch(graphics);
+    assets = new IOSAssets(graphics, audio);
     analytics = new IOSAnalytics();
     storage = new IOSStorage();
 
     mainWindow = new UIWindow(bounds);
-    mainWindow.Add(gameView = new IOSGameView(bounds, scale));
-  }
+    mainWindow.Add(gameView = new IOSGameView(this, bounds, scale));
 
-  /**
-   * Configures the orientations supported by your game.
-   */
-  public void setSupportedOrientations(boolean portrait, boolean landscapeRight,
-                                       boolean upsideDown, boolean landscapeLeft) {
-    graphics.ctx.setSupportedOrientations(portrait, landscapeRight, upsideDown, landscapeLeft);
+    // configure our orientation to a supported default, a notification will come in later that
+    // will adjust us to the devices current orientation
+    onOrientationChange(orients.defaultOrient);
   }
 
   @Override
@@ -143,7 +193,11 @@ public class IOSPlatform implements Platform {
 
   @Override
   public Mouse mouse() {
-    return null;
+    return new Mouse() {
+      public void setListener(Listener listener) {
+        log().warn("Mouse not supported on iOS.");
+      }
+    };
   }
 
   @Override
@@ -184,12 +238,7 @@ public class IOSPlatform implements Platform {
 
   @Override
   public double time() {
-    // NOTE: the CLR epoch is "00:00:00, 1/1/0001" not "00:00:00, 1/1/1970"; we should probably
-    // change the PlayN.currentTime() interface to return millis since app start rather than millis
-    // since epoch; if a game wants to do (limited) date processing, it can create a Date()
-
-    // get_Ticks returns 100 nanosecond ticks; turn that into millis
-    return DateTime.get_Now().get_Ticks()/10000d;
+    return System.currentTimeMillis();
   }
 
   @Override
@@ -197,8 +246,34 @@ public class IOSPlatform implements Platform {
     return Type.IOS;
   }
 
+  void onOrientationChange(UIDeviceOrientation orientation) {
+    if (!orients.isSupported(orientation))
+      return; // ignore unsupported (or Unknown) orientations
+    graphics.setOrientation(orientation);
+    app.SetStatusBarOrientation(ORIENT_MAP.get(orientation), true);
+    // TODO: notify the game of the orientation change
+  }
+
   void update(float delta) {
     // log.debug("Update " + delta);
+
+    // process any pending actions
+    List<Runnable> actions = null;
+    synchronized (pendingActions) {
+      if (!pendingActions.isEmpty()) {
+        actions = new ArrayList<Runnable>(pendingActions);
+        pendingActions.clear();
+      }
+    }
+    if (actions != null) {
+      for (Runnable action : actions) {
+        try {
+          action.run();
+        } catch (Exception e) {
+          log().warn("Pending action failed", e);
+        }
+      }
+    }
 
     // perform the game updates
     float updateRate = game.updateRate();
@@ -220,5 +295,26 @@ public class IOSPlatform implements Platform {
   void paint() {
     // log.debug("Paint " + alpha);
     graphics.paint(game, alpha);
+  }
+
+  /** Queues an action to be executed before the next {@link #update}. */
+  void queueAction(Runnable r) {
+    synchronized (pendingActions) {
+      pendingActions.add(r);
+    }
+  }
+
+  protected static final Map<UIDeviceOrientation,UIInterfaceOrientation> ORIENT_MAP =
+    new HashMap<UIDeviceOrientation,UIInterfaceOrientation>();
+  static {
+    ORIENT_MAP.put(UIDeviceOrientation.wrap(UIDeviceOrientation.Portrait),
+                   UIInterfaceOrientation.wrap(UIInterfaceOrientation.Portrait));
+    ORIENT_MAP.put(UIDeviceOrientation.wrap(UIDeviceOrientation.PortraitUpsideDown),
+                   UIInterfaceOrientation.wrap(UIInterfaceOrientation.PortraitUpsideDown));
+    // nb: these are swapped, because of some cracksmoking at Apple
+    ORIENT_MAP.put(UIDeviceOrientation.wrap(UIDeviceOrientation.LandscapeLeft),
+                   UIInterfaceOrientation.wrap(UIInterfaceOrientation.LandscapeRight));
+    ORIENT_MAP.put(UIDeviceOrientation.wrap(UIDeviceOrientation.LandscapeRight),
+                   UIInterfaceOrientation.wrap(UIInterfaceOrientation.LandscapeLeft));
   }
 }

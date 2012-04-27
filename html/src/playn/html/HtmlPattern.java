@@ -16,16 +16,49 @@
 package playn.html;
 
 import com.google.gwt.canvas.dom.client.CanvasPattern;
+import com.google.gwt.canvas.dom.client.Context2d;
+import com.google.gwt.dom.client.ImageElement;
 
-import playn.core.Pattern;
+import playn.core.gl.GLPattern;
+import playn.core.gl.ImageGL;
 
-class HtmlPattern implements Pattern {
+class HtmlPattern implements GLPattern {
 
-  final HtmlImage image;
-  final CanvasPattern pattern;
+  private final ImageGL image;
+  private final ImageElement patimg;
+  private CanvasPattern pattern;
 
-  HtmlPattern(HtmlImage image, CanvasPattern pattern) {
+  HtmlPattern(HtmlImage image) {
+    this(image, image.img);
+  }
+
+  HtmlPattern(ImageGL image, ImageElement patimg) {
     this.image = image;
-    this.pattern = pattern;
+    this.patimg = patimg;
+  }
+
+  public CanvasPattern pattern(Context2d ctx) {
+    return pattern(ctx, true, true);
+  }
+
+  public CanvasPattern pattern(Context2d ctx, boolean repeatX, boolean repeatY) {
+    Context2d.Repetition repeat;
+    if (repeatX) {
+      if (repeatY) {
+        repeat = Context2d.Repetition.REPEAT;
+      } else {
+        repeat = Context2d.Repetition.REPEAT_X;
+      }
+    } else if (repeatY) {
+      repeat = Context2d.Repetition.REPEAT_Y;
+    } else {
+      return null;
+    }
+    return ctx.createPattern(patimg, repeat);
+  }
+
+  @Override
+  public ImageGL image() {
+    return image;
   }
 }

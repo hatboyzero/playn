@@ -1,5 +1,5 @@
 /**
- * Copyright 2010 The PlayN Authors
+ * Copyright 2012 The PlayN Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,41 +15,40 @@
  */
 package playn.java;
 
+import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
 
-import playn.core.Asserts;
+import org.lwjgl.opengl.Display;
+
+import pythagoras.f.Point;
+
 import playn.core.CanvasImage;
-import playn.core.CanvasLayer;
 import playn.core.Font;
 import playn.core.Gradient;
-import playn.core.Graphics;
-import playn.core.GroupLayer;
 import playn.core.Image;
-import playn.core.ImageLayer;
-import playn.core.ImmediateLayer;
 import playn.core.Path;
 import playn.core.Pattern;
-import playn.core.SurfaceLayer;
 import playn.core.TextFormat;
 import playn.core.TextLayout;
+import playn.core.gl.GL20;
+import playn.core.gl.GLContext;
+import playn.core.gl.GraphicsGL;
+import playn.core.gl.GroupLayerGL;
 import static playn.core.PlayN.*;
 
-import java.awt.Component;
-import java.awt.Dimension;
+public class JavaGraphics extends GraphicsGL {
 
-import javax.swing.JFrame;
+  private final int DEFAULT_WIDTH = 640;
+  private final int DEFAULT_HEIGHT = 480;
 
-public class JavaGraphics implements Graphics {
+  private final GroupLayerGL rootLayer;
+  private final JavaGLContext ctx;
+  private JavaGL20 gl;
 
-  private final Component component;
-  private final JavaGroupLayer rootLayer;
-  private final JFrame frame;
-
-  JavaGraphics(JFrame frame, Component component) {
-    this.frame = frame;
-    this.component = component;
-    this.rootLayer = new JavaGroupLayer();
+  public JavaGraphics(float scaleFactor) {
+    this.ctx = new JavaGLContext(scaleFactor, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+    this.rootLayer = new GroupLayerGL(ctx);
   }
 
   /**
@@ -69,51 +68,14 @@ public class JavaGraphics implements Graphics {
     }
   }
 
-  @Override @Deprecated
-  public CanvasLayer createCanvasLayer(int width, int height) {
-    return new JavaCanvasLayer(width, height);
-  }
-
   @Override
-  public GroupLayer createGroupLayer() {
-    return new JavaGroupLayer();
-  }
-
-  @Override
-  public ImageLayer createImageLayer() {
-    return new JavaImageLayer();
-  }
-
-  @Override
-  public ImageLayer createImageLayer(Image image) {
-    Asserts.checkArgument(image instanceof JavaImage);
-    return new JavaImageLayer((JavaImage) image);
-  }
-
-  @Override
-  public SurfaceLayer createSurfaceLayer(int width, int height) {
-    return new JavaSurfaceLayer(width, height);
-  }
-
-  @Override
-  public ImmediateLayer.Clipped createImmediateLayer(
-      int width, int height, ImmediateLayer.Renderer renderer) {
-    return new JavaImmediateLayer.Clipped(width, height, renderer);
-  }
-
-  @Override
-  public ImmediateLayer createImmediateLayer(ImmediateLayer.Renderer renderer) {
-    return new JavaImmediateLayer(renderer);
-  }
-
-  @Override
-  public JavaGroupLayer rootLayer() {
+  public GroupLayerGL rootLayer() {
     return rootLayer;
   }
 
   @Override
   public CanvasImage createImage(int w, int h) {
-    return new JavaCanvasImage(w, h);
+    return new JavaCanvasImage(ctx, w, h);
   }
 
   @Override
@@ -122,14 +84,14 @@ public class JavaGraphics implements Graphics {
     return JavaGradient.createLinear(x0, y0, x1, y1, positions, colors);
   }
 
-  @Override
+  @Override @Deprecated
   public Path createPath() {
     return new JavaPath();
   }
 
-  @Override
+  @Override @Deprecated
   public Pattern createPattern(Image img) {
-    return JavaPattern.create((JavaImage) img);
+    return img.toPattern();
   }
 
   @Override
@@ -149,35 +111,63 @@ public class JavaGraphics implements Graphics {
 
   @Override
   public TextLayout layoutText(String text, TextFormat format) {
-    return new JavaTextLayout(frame, text, format);
+    return new JavaTextLayout(text, format);
   }
 
   @Override
   public int screenWidth() {
-    // TODO: Do we actually want to return the true screen width?
-    return component.getWidth();
+    return Display.getDesktopDisplayMode().getWidth();
   }
 
   @Override
   public int screenHeight() {
-    // TODO: Do we actually want to return the true screen height?
-    return component.getHeight();
-  }
-
-  @Override
-  public int width() {
-    return component.getWidth();
-  }
-
-  @Override
-  public int height() {
-    return component.getHeight();
+    return Display.getDesktopDisplayMode().getHeight();
   }
 
   @Override
   public void setSize(int width, int height) {
-    component.setPreferredSize(new Dimension(width, height));
-    frame.pack();
+    ctx.setSize(width, height);
+  }
+
+  @Override
+  public float scaleFactor() {
+    return ctx.scaleFactor;
+  }
+
+  @Override
+  public GL20 gl20() {
+    if (gl == null) {
+      gl = new JavaGL20();
+    }
+    return gl;
+  }
+
+  @Override
+  protected GLContext ctx() {
+    return ctx;
+  }
+
+  protected JavaImage createStaticImage(BufferedImage source) {
+    return new JavaStaticImage(ctx, source);
+  }
+
+  protected JavaImage createErrorImage(Exception cause) {
+    return new JavaErrorImage(ctx, cause);
+  }
+
+  void init() {
+    ctx.initGL();
+  }
+
+  void transformMouse(Point point) {
+    point.x /= ctx.scaleFactor;
+    point.y /= ctx.scaleFactor;
+  }
+
+  void paintLayers() {
+    if (gl == null) {
+      ctx.paintLayers(rootLayer);
+    }
   }
 
   protected Map<String,java.awt.Font> _fonts = new HashMap<String,java.awt.Font>();

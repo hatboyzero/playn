@@ -15,6 +15,7 @@
  */
 package playn.ios;
 
+import cli.System.IO.File;
 import cli.System.IO.FileAccess;
 import cli.System.IO.FileMode;
 import cli.System.IO.FileShare;
@@ -33,9 +34,16 @@ import playn.core.PlayN;
 import playn.core.ResourceCallback;
 import playn.core.Sound;
 
-class IOSAssets implements Assets
+public class IOSAssets implements Assets
 {
   private String pathPrefix = "";
+  private final IOSGraphics graphics;
+  private final IOSAudio audio;
+
+  public IOSAssets(IOSGraphics graphics, IOSAudio audio) {
+    this.graphics = graphics;
+    this.audio = audio;
+  }
 
   /**
    * Configures the prefix prepended to asset paths before fetching them from the app directory.
@@ -53,24 +61,29 @@ class IOSAssets implements Assets
 
   @Override
   public Image getImage(String path) {
-    PlayN.log().debug("Loading image " + path);
     String fullPath = Path.Combine(pathPrefix, path);
+    String scaledPath = graphics.adjustImagePath(fullPath);
+    if (File.Exists(scaledPath))
+      fullPath = scaledPath;
+    PlayN.log().debug("Loading image: " + fullPath);
     try {
       Stream stream = new FileStream(fullPath, FileMode.wrap(FileMode.Open),
                                      FileAccess.wrap(FileAccess.Read),
                                      FileShare.wrap(FileShare.Read));
       NSData data = NSData.FromStream(stream);
-      return new IOSImage(IOSPlatform.instance.graphics().ctx, UIImage.LoadFromData(data));
+      return createImage(graphics.ctx, UIImage.LoadFromData(data));
     } catch (Throwable t) {
-      PlayN.log().warn("Failed to load image: " + path + " [full=" + fullPath + "]", t);
-      return new IOSImage(IOSPlatform.instance.graphics().ctx, new UIImage());
+      PlayN.log().warn("Failed to load image: " + fullPath, t);
+      return createImage(graphics.ctx, new UIImage());
     }
   }
 
   @Override
   public Sound getSound(String path) {
+    path += ".mp3";
     PlayN.log().debug("Loading sound " + path);
-    return new IOSSound(); // TODO
+    String fullPath = Path.Combine(pathPrefix, path);
+    return audio.createSound(fullPath);
   }
 
   @Override
@@ -84,7 +97,9 @@ class IOSAssets implements Assets
     } catch (Throwable t) {
       callback.error(t);
     } finally {
-      reader.Close();
+      if (reader != null) {
+        reader.Close();
+      }
     }
   }
 
@@ -96,5 +111,9 @@ class IOSAssets implements Assets
   @Override
   public int getPendingRequestCount() {
     return 0; // nothing is async
+  }
+
+  protected IOSAbstractImage createImage(IOSGLContext ctx, UIImage image) {
+    return new IOSImage(ctx, image);
   }
 }

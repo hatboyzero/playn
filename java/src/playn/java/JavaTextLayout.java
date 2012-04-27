@@ -16,13 +16,14 @@
 package playn.java;
 
 import java.awt.Color;
-import java.awt.Frame;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.font.FontRenderContext;
 import java.awt.font.LineBreakMeasurer;
 import java.awt.font.TextAttribute;
 import java.awt.font.TextLayout;
 import java.awt.geom.Rectangle2D;
+import java.awt.image.BufferedImage;
 import java.text.AttributedString;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,12 +32,14 @@ import playn.core.TextFormat;
 
 class JavaTextLayout implements playn.core.TextLayout {
 
+  private static FontRenderContext dummyFontContext = createDummyFRC();
+
   private float width, height;
   private TextFormat format;
   private List<TextLayout> layouts = new ArrayList<TextLayout>();
   private Color textColor, altColor;
 
-  public JavaTextLayout (Frame frame, String text, TextFormat format) {
+  public JavaTextLayout(String text, TextFormat format) {
     this.format = format;
 
     // convert our colors to Java-land
@@ -54,17 +57,9 @@ class JavaTextLayout implements playn.core.TextLayout {
     if (format.font != null) {
       astring.addAttribute(TextAttribute.FONT, ((JavaFont)format.font).jfont);
     }
-    FontRenderContext fctx;
-    Graphics2D gfx = (Graphics2D)frame.getGraphics();
-    try {
-      fctx = gfx.getFontRenderContext();
-    } finally {
-      gfx.dispose();
-      gfx = null;
-    }
 
     if (format.shouldWrap() || text.indexOf('\n') != -1) {
-      LineBreakMeasurer measurer = new LineBreakMeasurer(astring.getIterator(), fctx);
+      LineBreakMeasurer measurer = new LineBreakMeasurer(astring.getIterator(), dummyFontContext);
       char eol = '\n'; // TODO: platform line endings?
       int lastPos = text.length();
       while (measurer.getPosition() < lastPos) {
@@ -75,7 +70,7 @@ class JavaTextLayout implements playn.core.TextLayout {
         layouts.add(measurer.nextLayout(format.wrapWidth, nextRet, false));
       }
     } else {
-      layouts.add(new TextLayout(astring.getIterator(), fctx));
+      layouts.add(new TextLayout(astring.getIterator(), dummyFontContext));
     }
 
     // compute our width and height
@@ -94,12 +89,15 @@ class JavaTextLayout implements playn.core.TextLayout {
 
   @Override
   public float width() {
-    return width;
+    // reserve a pixel on the left and right to make antialiasing work better
+    return width + 2*PAD;
   }
 
   @Override
   public float height() {
-    return height;
+    // reserve a pixel only on the top to make antialising work better; nearly no fonts jam up
+    // against the bottom, so reserving a pixel down there just makes things look misaligned
+    return height + PAD;
   }
 
   @Override
@@ -174,7 +172,7 @@ class JavaTextLayout implements playn.core.TextLayout {
       // box size and render this text layout into it at (0,0) and nothing will get cut off)
       float rx = (float)-bounds.getX() + format.align.getX(getWidth(bounds), width);
       yoff += layout.getAscent();
-      layout.draw(gfx, x + rx, y + yoff);
+      layout.draw(gfx, x + rx + PAD, y + yoff + PAD);
       if (layout != layouts.get(0)) {
         yoff += layout.getLeading(); // add interline spacing
       }
@@ -186,4 +184,14 @@ class JavaTextLayout implements playn.core.TextLayout {
     // if our text includes a negative inset, that needs to be tacked onto the width
     return (float)(Math.max(-bounds.getX(), 0) + bounds.getWidth());
   }
+
+  private static FontRenderContext createDummyFRC () {
+    Graphics2D gfx = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB).createGraphics();
+    gfx.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    return gfx.getFontRenderContext();
+  }
+
+  // this is used to reserve one pixel of padding around the top and sides of our rendered text
+  // which makes antialising work much more nicely
+  private final float PAD = 1;
 }

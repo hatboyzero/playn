@@ -15,18 +15,78 @@
  */
 package playn.ios;
 
+import cli.System.AsyncCallback;
+import cli.System.IAsyncResult;
+import cli.System.IO.StreamReader;
+import cli.System.IO.StreamWriter;
+import cli.System.Net.WebRequest;
+import cli.System.Net.WebResponse;
+
 import playn.core.Net;
 import playn.core.util.Callback;
 
-class IOSNet implements Net
+public class IOSNet implements Net
 {
-  @Override
-  public void get(String url, Callback<String> callback) {
-    throw new RuntimeException("TODO");
+  private final IOSPlatform platform;
+
+  public IOSNet(IOSPlatform platform) {
+    this.platform = platform;
   }
 
   @Override
-  public void post(String url, String data, Callback<String> callback) {
-    throw new RuntimeException("TODO");
+  public void get(String url, Callback<String> callback) {
+    final WebRequest req = WebRequest.Create(url);
+    req.BeginGetResponse(gotResponse(req, callback), null);
+  }
+
+  @Override
+  public void post(String url, final String data, final Callback<String> callback) {
+    final WebRequest req = WebRequest.Create(url);
+    req.set_Method("POST");
+    req.BeginGetRequestStream(new AsyncCallback(new AsyncCallback.Method() {
+      @Override
+      public void Invoke(IAsyncResult result) {
+        try {
+          StreamWriter out = new StreamWriter(req.GetRequestStream());
+          out.Write(data);
+          out.Close();
+          req.BeginGetResponse(gotResponse(req, callback), null);
+        } catch (Throwable t) {
+          queueFailure(callback, t);
+        }
+      }
+    }), null);
+  }
+
+  protected AsyncCallback gotResponse (final WebRequest req, final Callback<String> callback) {
+    return new AsyncCallback(new AsyncCallback.Method() {
+      @Override
+      public void Invoke(IAsyncResult result) {
+        StreamReader reader = null;
+        try {
+          WebResponse rsp = req.EndGetResponse(result);
+          reader = new StreamReader(rsp.GetResponseStream());
+          final String data = reader.ReadToEnd();
+          platform.queueAction(new Runnable() {
+            public void run () {
+              callback.onSuccess(data);
+            }
+          });
+        } catch (final Throwable t) {
+          queueFailure(callback, t);
+        } finally {
+          if (reader != null)
+            reader.Close();
+        }
+      }
+    });
+  }
+
+  private void queueFailure (final Callback<?> callback, final Throwable t) {
+    platform.queueAction(new Runnable() {
+      public void run () {
+        callback.onFailure(t);
+      }
+    });
   }
 }

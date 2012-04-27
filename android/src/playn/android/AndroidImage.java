@@ -18,11 +18,13 @@ package playn.android;
 import android.graphics.Bitmap;
 
 import playn.core.Image;
+import playn.core.Pattern;
 import playn.core.ResourceCallback;
 import playn.core.gl.GLContext;
 import playn.core.gl.ImageGL;
 
 class AndroidImage extends ImageGL implements AndroidGLContext.Refreshable {
+
   private final AndroidGLContext ctx;
   private final Bitmap bitmap;
 
@@ -37,7 +39,7 @@ class AndroidImage extends ImageGL implements AndroidGLContext.Refreshable {
   }
 
   @Override
-  public void addCallback(ResourceCallback<Image> callback) {
+  public void addCallback(ResourceCallback<? super Image> callback) {
     // we're always ready immediately
     callback.done(this);
   }
@@ -69,6 +71,27 @@ class AndroidImage extends ImageGL implements AndroidGLContext.Refreshable {
   @Override
   public boolean isReady() {
     return true;
+  }
+
+  @Override
+  public Region subImage(float x, float y, float width, float height) {
+    return new AndroidImageRegion(ctx, this, x, y, width, height);
+  }
+
+  @Override
+  public Pattern toPattern() {
+    return new AndroidPattern(this);
+  }
+
+  @Override
+  public void getRgb(int startX, int startY, int width, int height, int[] rgbArray, int offset,
+                     int scanSize) {
+    bitmap.getPixels(rgbArray, offset, scanSize, startX, startY, width, height);
+  }
+
+  @Override
+  public Image transform(BitmapTransformer xform) {
+    return new AndroidImage(ctx, ((AndroidBitmapTransformer) xform).transform(bitmap));
   }
 
   @Override

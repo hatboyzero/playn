@@ -15,6 +15,8 @@
  */
 package playn.core;
 
+import pythagoras.f.Point;
+
 /**
  * Input-device interface for mouse events. This interface is for mice and
  * supports buttons and the scroll wheel.
@@ -50,6 +52,17 @@ public interface Mouse {
         this.button = button;
       }
 
+      /** Creates a copy of this event with local x and y in the supplied layer's coord system. */
+      public ButtonEvent.Impl localize(Layer layer) {
+        Point local = Layer.Util.screenToLayer(layer, x(), y());
+        return new ButtonEvent.Impl(time(), x(), y(), local.x, local.y, button);
+      }
+
+      protected Impl(double time, float x, float y, float localX, float localY, int button) {
+        super(time, x, y, localX, localY);
+        this.button = button;
+      }
+
       @Override
       protected String name() {
         return "ButtonEvent";
@@ -70,6 +83,16 @@ public interface Mouse {
     class Impl extends Events.Position.Impl implements MotionEvent {
       public Impl(double time, float x, float y) {
         super(time, x, y);
+      }
+
+      /** Creates a copy of this event with local x and y in the supplied layer's coord system. */
+      public MotionEvent.Impl localize(Layer layer) {
+        Point local = Layer.Util.screenToLayer(layer, x(), y());
+        return new MotionEvent.Impl(time(), x(), y(), local.x, local.y);
+      }
+
+      protected Impl(double time, float x, float y, float localX, float localY) {
+        super(time, x, y, localX, localY);
       }
 
       @Override

@@ -22,17 +22,17 @@ import cli.System.Runtime.InteropServices.GCHandleType;
 import cli.OpenTK.Graphics.ES20.All;
 import cli.OpenTK.Graphics.ES20.GL;
 
-import playn.core.InternalTransform;
 import playn.core.PlayN;
 import playn.core.gl.GLShader;
+import playn.core.gl.IndexedTrisShader;
 
-public class IOSGLShader implements GLShader {
+public class IOSGLShader extends IndexedTrisShader {
 
   public static class Texture extends IOSGLShader implements GLShader.Texture {
     private int uTexture, uAlpha, lastTex;
     private float lastAlpha;
 
-    Texture(IOSGLContext ctx) {
+    public Texture(IOSGLContext ctx) {
       super(ctx, TEX_FRAG_SHADER);
       uTexture = GL.GetUniformLocation(program, "u_Texture");
       uAlpha = GL.GetUniformLocation(program, "u_Alpha");
@@ -45,22 +45,22 @@ public class IOSGLShader implements GLShader {
     }
 
     @Override
-    public void prepare(Object texObj, float alpha) {
+    public void prepare(Object texObj, float alpha, int fbufWidth, int fbufHeight) {
       ctx.checkGLError("textureShader.prepare start");
-      if (super.prepare()) {
+      boolean wasntAlreadyActive = super.prepare(fbufWidth, fbufHeight);
+      if (wasntAlreadyActive) {
         GL.ActiveTexture(All.wrap(All.Texture0));
         GL.Uniform1(uTexture, 0);
       }
 
       int tex = (Integer) texObj;
-      if (tex == lastTex && alpha == lastAlpha)
-        return;
-      flush();
-
-      GL.Uniform1(uAlpha, alpha);
-      lastAlpha = alpha;
-      lastTex = tex;
-      ctx.checkGLError("textureShader.prepare end");
+      if (wasntAlreadyActive || tex != lastTex || alpha != lastAlpha) {
+        flush();
+        GL.Uniform1(uAlpha, alpha);
+        lastAlpha = alpha;
+        lastTex = tex;
+        ctx.checkGLError("textureShader.prepare end");
+      }
     }
   }
 
@@ -68,66 +68,58 @@ public class IOSGLShader implements GLShader {
     private int uColor, uAlpha, lastColor;
     private float lastAlpha;
 
-    Color(IOSGLContext ctx) {
+    public Color(IOSGLContext ctx) {
       super(ctx, COLOR_FRAG_SHADER);
       uColor = GL.GetUniformLocation(program, "u_Color");
       uAlpha = GL.GetUniformLocation(program, "u_Alpha");
     }
 
     @Override
-    public void prepare(int color, float alpha) {
+    public void prepare(int color, float alpha, int fbufWidth, int fbufHeight) {
       ctx.checkGLError("colorShader.prepare start");
-      super.prepare();
-
-      ctx.checkGLError("colorShader.prepare super called");
-
-      if (color == lastColor && alpha == lastAlpha)
-        return;
-      flush();
-
-      ctx.checkGLError("colorShader.prepare flushed");
-
-      GL.Uniform1(uAlpha, alpha);
-      lastAlpha = alpha;
-      setColor(color);
-      ctx.checkGLError("colorShader.prepare end");
-    }
-
-    private void setColor(int color) {
-      float a = (float) ((color >> 24) & 0xff) / 255;
-      float r = (float) ((color >> 16) & 0xff) / 255;
-      float g = (float) ((color >> 8) & 0xff) / 255;
-      float b = (float) ((color >> 0) & 0xff) / 255;
-      GL.Uniform4(uColor, r, g, b, a);
-      lastColor = color;
+      boolean wasntAlreadyActive = super.prepare(fbufWidth, fbufHeight);
+      if (wasntAlreadyActive || color != lastColor || alpha != lastAlpha) {
+        flush();
+        GL.Uniform1(uAlpha, alpha);
+        lastAlpha = alpha;
+        float a = (float) ((color >> 24) & 0xff) / 255;
+        float r = (float) ((color >> 16) & 0xff) / 255;
+        float g = (float) ((color >> 8) & 0xff) / 255;
+        float b = (float) ((color >> 0) & 0xff) / 255;
+        GL.Uniform4(uColor, r, g, b, a);
+        lastColor = color;
+        ctx.checkGLError("colorShader.prepare end");
+      }
     }
   }
 
   private static final int VERTEX_SIZE = 10; // 10 floats per vertex
-  private static final int MAX_VERTS = 4;
-  private static final int MAX_ELEMS = 6;
-  private static final int FLOAT_SIZE_BYTES = 4;
-  private static final int SHORT_SIZE_BYTES = 2;
-  private static final int VERTEX_STRIDE = VERTEX_SIZE * FLOAT_SIZE_BYTES;
+  private static final int START_VERTS = 4*16;
+  private static final int EXPAND_VERTS = 4*16;
+  private static final int START_ELEMS = 6*START_VERTS/4;
+  private static final int EXPAND_ELEMS = 6*EXPAND_VERTS/4;
+  private static final int SIZEOF_FLOAT = 4;
+  private static final int VERTEX_STRIDE = VERTEX_SIZE * SIZEOF_FLOAT;
 
   protected final IOSGLContext ctx;
   protected final int program, uScreenSizeLoc, aMatrix, aTranslation, aPosition, aTexture;
 
-  protected final float[] vertexData = new float[VERTEX_SIZE * MAX_VERTS];
-  protected final GCHandle vertexHandle = GCHandle.Alloc(
-    vertexData, GCHandleType.wrap(GCHandleType.Pinned));
+  protected float[] vertexData;
+  protected GCHandle vertexHandle;
   protected final int vertexBuffer;
   protected int vertexOffset;
 
-  protected final short[] elementData = new short[MAX_ELEMS];
-  protected final GCHandle elementHandle = GCHandle.Alloc(
-    elementData, GCHandleType.wrap(GCHandleType.Pinned));
+  protected short[] elementData;
+  protected GCHandle elementHandle;
   protected final int elementBuffer;
   protected int elementOffset;
 
   protected IOSGLShader(IOSGLContext ctx, String fragShader) {
     this.ctx = ctx;
     program = createProgram(VERTEX_SHADER, fragShader);
+
+    expandVerts(START_VERTS);
+    expandElems(START_ELEMS);
 
     uScreenSizeLoc = GL.GetUniformLocation(program, "u_ScreenSize");
     aMatrix = GL.GetAttribLocation(program, "a_Matrix");
@@ -141,15 +133,15 @@ public class IOSGLShader implements GLShader {
     elementBuffer = buffers[1];
   }
 
-  protected boolean prepare() {
+  protected boolean prepare(int fbufWidth, int fbufHeight) {
     if (!ctx.useShader(this))
       return false;
 
     GL.UseProgram(program);
     ctx.checkGLError("Shader.prepare useProgram");
 
-    GL.Uniform2(uScreenSizeLoc, (float)ctx.fbufWidth, (float)ctx.fbufHeight);
-    // ctx.checkGLError("Shader.prepare uScreenSizeLoc set to " + viewWidth + " " + viewHeight);
+    GL.Uniform2(uScreenSizeLoc, (float)fbufWidth, (float)fbufHeight);
+    // ctx.checkGLError("Shader.prepare uScreenSizeLoc set to " + fbufWidth + " " + fbufHeight);
 
     GL.BindBuffer(All.wrap(All.ArrayBuffer), vertexBuffer);
     GL.BindBuffer(All.wrap(All.ElementArrayBuffer), elementBuffer);
@@ -183,41 +175,38 @@ public class IOSGLShader implements GLShader {
       return;
 
     ctx.checkGLError("Shader.flush");
-    // GL.BufferData(All.wrap(All.ArrayBuffer), vertexOffset * FLOAT_SIZE_BYTES,
-    //               vertexHandle.AddrOfPinnedObject(), All.wrap(All.StreamDraw));
-    // GL.BufferData(All.wrap(All.ElementArrayBuffer), elementOffset * SHORT_SIZE_BYTES,
-    //               elementHandle.AddrOfPinnedObject(), All.wrap(All.StreamDraw));
-    // ctx.checkGLError("Shader.flush BufferData");
-    GL.DrawElements(All.wrap(All.TriangleStrip), elementOffset, All.wrap(All.UnsignedShort),
+    GL.DrawElements(All.wrap(All.Triangles), elementOffset, All.wrap(All.UnsignedShort),
                     elementHandle.AddrOfPinnedObject());
     vertexOffset = elementOffset = 0;
     ctx.checkGLError("Shader.flush DrawElements");
   }
 
   @Override
-  public int beginPrimitive(int vertexCount, int elemCount) {
+  protected int beginPrimitive(int vertexCount, int elemCount) {
     int vertIdx = vertexOffset / VERTEX_SIZE;
-    if ((vertIdx + vertexCount > MAX_VERTS) || (elementOffset + elemCount > MAX_ELEMS)) {
+    int verts = vertIdx + vertexCount, elems = elementOffset + elemCount;
+    int availVerts = vertexData.length / VERTEX_SIZE, availElems = elementData.length;
+    if ((verts > availVerts) || (elems > availElems)) {
       flush();
+      if (vertexCount > availVerts)
+        expandVerts(vertexCount);
+      if (elemCount > availElems)
+        expandElems(elemCount);
       return 0;
     }
     return vertIdx;
   }
 
   @Override
-  public void buildVertex(InternalTransform local, float dx, float dy) {
-    buildVertex(local, dx, dy, 0, 0);
-  }
-
-  @Override
-  public void buildVertex(InternalTransform local, float dx, float dy, float sx, float sy) {
+  protected void addVertex(float m00, float m01, float m10, float m11, float tx, float ty,
+                           float dx, float dy, float sx, float sy) {
     int ii = vertexOffset;
-    vertexData[ii++] = local.m00();
-    vertexData[ii++] = local.m01();
-    vertexData[ii++] = local.m10();
-    vertexData[ii++] = local.m11();
-    vertexData[ii++] = local.tx();
-    vertexData[ii++] = local.ty();
+    vertexData[ii++] = m00;
+    vertexData[ii++] = m01;
+    vertexData[ii++] = m10;
+    vertexData[ii++] = m11;
+    vertexData[ii++] = tx;
+    vertexData[ii++] = ty;
     vertexData[ii++] = dx;
     vertexData[ii++] = dy;
     vertexData[ii++] = sx;
@@ -226,8 +215,28 @@ public class IOSGLShader implements GLShader {
   }
 
   @Override
-  public void addElement(int index) {
+  protected void addElement(int index) {
     elementData[elementOffset++] = (short) index;
+  }
+
+  private void expandVerts(int vertCount) {
+    int newVerts = (vertexData == null) ? 0 : vertexData.length / VERTEX_SIZE;
+    while (newVerts < vertCount)
+      newVerts += EXPAND_VERTS;
+    if (vertexHandle != null)
+      vertexHandle.Free();
+    vertexData = new float[VERTEX_SIZE * newVerts];
+    vertexHandle = GCHandle.Alloc(vertexData, GCHandleType.wrap(GCHandleType.Pinned));
+  }
+
+  private void expandElems(int elemCount) {
+    int newElems = (elementData == null) ? 0 : elementData.length;
+    while (newElems < elemCount)
+      newElems += EXPAND_ELEMS;
+    if (elementHandle != null)
+      elementHandle.Free();
+    elementData = new short[newElems];
+    elementHandle = GCHandle.Alloc(elementData, GCHandleType.wrap(GCHandleType.Pinned));
   }
 
   private int loadShader(All type, final String shaderSource) {

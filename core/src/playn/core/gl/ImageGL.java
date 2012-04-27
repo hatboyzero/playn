@@ -1,5 +1,5 @@
 /**
- * Copyright 2010 The PlayN Authors
+ * Copyright 2010-2012 The PlayN Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package playn.core.gl;
 
 import playn.core.Asserts;
 import playn.core.Image;
+import playn.core.InternalTransform;
 import playn.core.Pattern;
 
 public abstract class ImageGL implements Image {
@@ -80,6 +81,59 @@ public abstract class ImageGL implements Image {
   }
 
   /**
+   * Draws this image with the supplied transform in the specified target dimensions.
+   */
+  void draw(GLContext ctx, InternalTransform xform, float dx, float dy, float dw, float dh,
+            boolean repeatX, boolean repeatY, float alpha) {
+    Object tex = ensureTexture(ctx, repeatX, repeatY);
+    if (tex != null) {
+      float sw = repeatX ? dw : width(), sh = repeatY ? dh : height();
+      ctx.drawTexture(tex, texWidth(repeatX), texHeight(repeatY), xform,
+                      dx, dy, dw, dh, x(), y(), sw, sh, alpha);
+    }
+  }
+
+  /**
+   * Draws this image with the supplied transform, and source and target dimensions.
+   */
+  void draw(GLContext ctx, InternalTransform xform, float dx, float dy, float dw, float dh,
+            float sx, float sy, float sw, float sh, float alpha) {
+    Object tex = ensureTexture(ctx, false, false);
+    if (tex != null) {
+      ctx.drawTexture(tex, texWidth(false), texHeight(false), xform,
+                      dx, dy, dw, dh, x()+sx, y()+sy, sw, sh, alpha);
+    }
+  }
+
+  /**
+   * The x offset into our source image at which this image's region starts.
+   */
+  protected float x() {
+    return 0;
+  }
+
+  /**
+   * The y offset into our source image at which this image's region starts.
+   */
+  protected float y() {
+    return 0;
+  }
+
+  /**
+   * Returns the width of our underlying texture image.
+   */
+  protected float texWidth(boolean repeatX) {
+    return width();
+  }
+
+  /**
+   * Returns the height of our underlying texture image.
+   */
+  protected float texHeight(boolean repeatY) {
+    return height();
+  }
+
+  /**
    * Copies our current image data into the supplied texture.
    */
   protected abstract void updateTexture(GLContext ctx, Object tex);
@@ -95,15 +149,18 @@ public abstract class ImageGL implements Image {
     if (reptex != null)
       return;
 
+    int scaledWidth = ctx.scaledCeil(width());
+    int scaledHeight = ctx.scaledCeil(height());
+
     // GL requires pow2 on axes that repeat
-    int width = GLUtil.nextPowerOfTwo(width()), height = GLUtil.nextPowerOfTwo(height());
+    int width = GLUtil.nextPowerOfTwo(scaledWidth), height = GLUtil.nextPowerOfTwo(scaledHeight);
 
     // TODO: if width/height > platform_max_size, repeatedly scale by 0.5 until within bounds
     // platform_max_size = 1024 for iOS, GL10.GL_MAX_TEXTURE_SIZE on android, etc.
 
     // no need to scale if our source data is already a power of two
     if ((width == 0) && (height == 0)) {
-      reptex = ctx.createTexture(width(), height(), repeatX, repeatY);
+      reptex = ctx.createTexture(scaledWidth, scaledHeight, repeatX, repeatY);
       updateTexture(ctx, reptex);
       return;
     }
@@ -113,9 +170,9 @@ public abstract class ImageGL implements Image {
 
     // width/height == 0 => already a power of two.
     if (width == 0)
-      width = width();
+      width = scaledWidth;
     if (height == 0)
-      height = height();
+      height = scaledHeight;
 
     // create our texture and point a new framebuffer at it
     reptex = ctx.createTexture(width, height, repeatX, repeatY);

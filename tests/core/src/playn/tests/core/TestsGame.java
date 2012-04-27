@@ -18,18 +18,23 @@ package playn.tests.core;
 import playn.core.Color;
 import playn.core.Game;
 import playn.core.ImmediateLayer;
-import playn.core.Pointer;
+import playn.core.Mouse;
 import playn.core.Surface;
+import playn.core.Touch;
 import static playn.core.PlayN.*;
 
 public class TestsGame implements Game {
   Test[] tests = new Test[] {
+    new SubImageTest(),
+    new SurfaceTest(),
     new CanvasTest(),
     new ImmediateTest(),
     new ImageTypeTest(),
     new AlphaLayerTest(),
     new DepthTest(),
     new ClearBackgroundTest(),
+    new LayerClickTest(),
+    new GetTextTest(),
     /*new YourTest(),*/
   };
   int currentTest;
@@ -37,26 +42,44 @@ public class TestsGame implements Game {
   @Override
   public void init() {
     // display basic instructions
-    log().info("Click or touch to go to the next test.");
+    log().info("Right click or touch with two fingers to go to the next test.");
 
-    // add a listener for pointer (mouse, touch) input
-    pointer().setListener(new Pointer.Adapter() {
-      @Override
-      public void onPointerStart(Pointer.Event event) {
-        nextTest();
-      }
-    });
+    // add a listener for mouse and touch inputs
+    try {
+      mouse().setListener(new Mouse.Adapter() {
+        @Override
+        public void onMouseDown(Mouse.ButtonEvent event) {
+          if (event.button() == Mouse.BUTTON_RIGHT)
+            advanceTest(1);
+          else if (event.button() == Mouse.BUTTON_MIDDLE)
+            advanceTest(-1);
+        }
+      });
+    } catch (UnsupportedOperationException e) {
+      // no support for mouse; no problem
+    }
+    try {
+      touch().setListener(new Touch.Adapter() {
+        public void onTouchStart(Touch.Event[] touches) {
+          if (touches.length > 2)
+            advanceTest(-1);
+          else if (touches.length > 1)
+            advanceTest(1);
+        }
+      });
+    } catch (UnsupportedOperationException e) {
+      // no support for touch; no problem
+    }
 
-    currentTest = -1;
-    nextTest();
+    advanceTest(currentTest = 0);
   }
 
   Test currentTest() {
     return tests[currentTest];
   }
 
-  void nextTest() {
-    currentTest = (currentTest + 1) % tests.length;
+  void advanceTest(int delta) {
+    currentTest = (currentTest + tests.length + delta) % tests.length;
 
     // setup root layer for next test
     graphics().rootLayer().clear();

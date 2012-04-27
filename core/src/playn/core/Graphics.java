@@ -15,6 +15,8 @@
  */
 package playn.core;
 
+import playn.core.gl.GL20;
+
 /**
  * Main 2D graphics interface. This interface can be used to create and load
  * graphics objects used with {@link Canvas}.
@@ -81,14 +83,15 @@ public interface Graphics {
       int colors[], float positions[]);
 
   /**
-   * Creates a path object that may be used with {@link Canvas} drawing methods.
+   * @deprecated Use {@link Canvas#createPath}.
    */
+  @Deprecated
   Path createPath();
 
   /**
-   * Creates a repeated image fill pattern to be used with {@link Canvas}
-   * drawing methods.
+   * @deprecated Use {@link Image#toPattern}.
    */
+  @Deprecated
   Pattern createPattern(Image img);
 
   /**
@@ -134,4 +137,19 @@ public interface Graphics {
    * Sets the size of the drawable surface, in pixels.
    */
   void setSize(int width, int height);
+
+  /**
+   * Returns the display scale factor. This will be 1 except on HiDPI devices that have been
+   * configured to use HiDPI mode, where it will probably be 2, but could be some other scale
+   * depending on how things were configured when initializing the platform.
+   */
+  float scaleFactor();
+
+  /**
+   * <b>WARNING</b>: this is a totally experimental, untested feature. It only works on Android. It
+   * may change completely. Consider yourself warned.
+   *
+   * <p> Returns a reference to the GL context. </p>
+   */
+  GL20 gl20();
 }

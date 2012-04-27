@@ -15,6 +15,8 @@
  */
 package playn.flash;
 
+import pythagoras.f.Point;
+
 import flash.display.DisplayObject;
 import flash.display.DisplayObjectContainer;
 import flash.display.Sprite;
@@ -61,6 +63,11 @@ public class FlashGroupLayer extends FlashLayer implements GroupLayer, ParentLay
   }
 
   @Override
+  public void addAt(Layer layer, float tx, float ty) {
+    impl.addAt(this, layer, tx, ty);
+  }
+
+  @Override
   public void remove(Layer layer) {
     impl.remove(this, (FlashLayer) layer);
     container().removeChild(display(layer));
@@ -101,6 +108,11 @@ public class FlashGroupLayer extends FlashLayer implements GroupLayer, ParentLay
   public void onRemove() {
     super.onRemove();
     impl.onRemove(this);
+  }
+
+  @Override
+  public Layer hitTestDefault(Point p) {
+    return impl.hitTest(this, p);
   }
 
   @Override

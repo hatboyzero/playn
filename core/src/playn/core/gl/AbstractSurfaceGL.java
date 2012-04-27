@@ -18,6 +18,8 @@ package playn.core.gl;
 import java.util.ArrayList;
 import java.util.List;
 
+import pythagoras.f.MathUtil;
+
 import playn.core.Asserts;
 import playn.core.Image;
 import playn.core.InternalTransform;
@@ -34,6 +36,7 @@ abstract class AbstractSurfaceGL implements Surface {
   protected final List<InternalTransform> transformStack = new ArrayList<InternalTransform>();
 
   protected int fillColor;
+  protected float alpha = 1;
   protected ImageGL fillPattern;
 
   protected AbstractSurfaceGL(GLContext ctx) {
@@ -52,39 +55,27 @@ abstract class AbstractSurfaceGL implements Surface {
 
   @Override
   public Surface drawImage(Image image, float x, float y) {
-    drawImage(image, x, y, image.width(), image.height());
-    return this;
+    return drawImage(image, x, y, image.width(), image.height());
   }
 
   @Override
   public Surface drawImage(Image image, float x, float y, float dw, float dh) {
     bindFramebuffer();
-
-    Object tex = ((ImageGL) image).ensureTexture(ctx, false, false);
-    if (tex != null) {
-      ctx.drawTexture(tex, image.width(), image.height(), topTransform(),
-                      x, y, dw, dh, false, false, 1);
-    }
+    ((ImageGL) image).draw(ctx, topTransform(), x, y, dw, dh, false, false, alpha);
     return this;
   }
 
   @Override
-  public Surface drawImage(Image image, float dx, float dy, float dw, float dh, float sx, float sy,
-      float sw, float sh) {
+  public Surface drawImage(Image image, float dx, float dy, float dw, float dh,
+                           float sx, float sy, float sw, float sh) {
     bindFramebuffer();
-
-    Object tex = ((ImageGL) image).ensureTexture(ctx, false, false);
-    if (tex != null) {
-      ctx.drawTexture(tex, image.width(), image.height(), topTransform(),
-                      dx, dy, dw, dh, sx, sy, sw, sh, 1);
-    }
+    ((ImageGL) image).draw(ctx, topTransform(), dx, dy, dw, dh, sx, sy, sw, sh, alpha);
     return this;
   }
 
   @Override
   public Surface drawImageCentered(Image img, float x, float y) {
-    drawImage(img, x - img.width()/2, y - img.height()/2);
-    return this;
+    return drawImage(img, x - img.width()/2, y - img.height()/2);
   }
 
   @Override
@@ -96,12 +87,20 @@ abstract class AbstractSurfaceGL implements Surface {
     dx = dx * (width / 2) / len;
     dy = dy * (width / 2) / len;
 
-    float[] pos = new float[8];
-    pos[0] = x0 - dy; pos[1] = y0 + dx;
-    pos[2] = x1 - dy; pos[3] = y1 + dx;
-    pos[4] = x1 + dy; pos[5] = y1 - dx;
-    pos[6] = x0 + dy; pos[7] = y0 - dx;
-    ctx.fillPoly(topTransform(), pos, fillColor, 1);
+    float qx1 = x0 - dy, qy1 = y0 + dx;
+    float qx2 = x0 + dy, qy2 = y0 - dx;
+    float qx3 = x1 - dy, qy3 = y1 + dx;
+    float qx4 = x1 + dy, qy4 = y1 - dx;
+
+    if (fillPattern != null) {
+      Object tex = fillPattern.ensureTexture(ctx, true, true);
+      if (tex != null) {
+        ctx.fillQuad(topTransform(), qx1, qy1, qx2, qy2, qx3, qy3, qx4, qy4,
+                     fillPattern.width(), fillPattern.height(), tex, alpha);
+      }
+    } else {
+      ctx.fillQuad(topTransform(), qx1, qy1, qx2, qy2, qx3, qy3, qx4, qy4, fillColor, alpha);
+    }
     return this;
   }
 
@@ -111,10 +110,41 @@ abstract class AbstractSurfaceGL implements Surface {
 
     if (fillPattern != null) {
       Object tex = fillPattern.ensureTexture(ctx, true, true);
-      ctx.fillRect(topTransform(), x, y, width, height,
-                   fillPattern.width(), fillPattern.height(), tex, 1);
+      if (tex != null) {
+        ctx.fillRect(topTransform(), x, y, width, height,
+                     fillPattern.width(), fillPattern.height(), tex, alpha);
+      }
     } else {
-      ctx.fillRect(topTransform(), x, y, width, height, fillColor, 1);
+      ctx.fillRect(topTransform(), x, y, width, height, fillColor, alpha);
+    }
+    return this;
+  }
+
+  @Override
+  public Surface fillTriangles(float[] xys, int[] indices) {
+    bindFramebuffer();
+
+    if (fillPattern != null) {
+      Object tex = fillPattern.ensureTexture(ctx, true, true);
+      if (tex != null) {
+        ctx.fillTriangles(topTransform(), xys, indices,
+                          fillPattern.width(), fillPattern.height(), tex, alpha);
+      }
+    } else {
+      ctx.fillTriangles(topTransform(), xys, indices, fillColor, alpha);
+    }
+    return this;
+  }
+
+  @Override
+  public Surface fillTriangles(float[] xys, float[] sxys, int[] indices) {
+    bindFramebuffer();
+
+    if (fillPattern == null)
+      throw new IllegalStateException("No fill pattern currently set");
+    Object tex = fillPattern.ensureTexture(ctx, true, true);
+    if (tex != null) {
+      ctx.fillTriangles(topTransform(), xys, sxys, indices, tex, alpha);
     }
     return this;
   }
@@ -149,6 +179,12 @@ abstract class AbstractSurfaceGL implements Surface {
   @Override
   public Surface setTransform(float m00, float m01, float m10, float m11, float tx, float ty) {
     topTransform().setTransform(m00, m01, m10, m11, tx, ty);
+    return this;
+  }
+
+  @Override
+  public Surface setAlpha(float alpha) {
+    this.alpha = MathUtil.clamp(alpha, 0, 1);
     return this;
   }
 

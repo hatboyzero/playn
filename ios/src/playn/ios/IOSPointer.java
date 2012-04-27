@@ -23,49 +23,44 @@ import cli.MonoTouch.Foundation.NSSetEnumerator;
 import cli.MonoTouch.UIKit.UIEvent;
 import cli.MonoTouch.UIKit.UITouch;
 
+import pythagoras.f.IPoint;
+
 import playn.core.PlayN;
-import playn.core.Pointer;
+import playn.core.PointerImpl;
 
-class IOSPointer implements Pointer
+public class IOSPointer extends PointerImpl
 {
-  private Listener listener;
+  private final IOSGraphics graphics;
 
-  @Override
-  public void setListener(Listener listener) {
-    this.listener = listener;
+  public IOSPointer(IOSGraphics graphics) {
+    this.graphics = graphics;
   }
 
   void onTouchesBegan(NSSet touches, UIEvent event) {
-    if (listener != null) {
-      listener.onPointerStart(toPointerEvent(touches, event));
-    }
+    onPointerStart(toPointerEvent(touches, event), false);
   }
 
   void onTouchesMoved(NSSet touches, UIEvent event) {
-    if (listener != null) {
-      listener.onPointerDrag(toPointerEvent(touches, event));
-    }
+    onPointerDrag(toPointerEvent(touches, event), false);
   }
 
   void onTouchesEnded(NSSet touches, UIEvent event) {
-    if (listener != null) {
-      listener.onPointerEnd(toPointerEvent(touches, event));
-    }
+    onPointerEnd(toPointerEvent(touches, event), false);
   }
 
   void onTouchesCancelled(NSSet touches, UIEvent event) {
-    if (listener != null) {
-      // TODO: ???
-    }
+    // TODO: ???
   }
 
-  private Pointer.Event toPointerEvent(NSSet touches, UIEvent event) {
-    final Pointer.Event[] eventw = new Pointer.Event[1];
+  private Event.Impl toPointerEvent(NSSet touches, UIEvent event) {
+    final Event.Impl[] eventw = new Event.Impl[1];
     touches.Enumerate(new NSSetEnumerator(new NSSetEnumerator.Method() {
       public void Invoke (NSObject obj, boolean[] stop) {
         UITouch touch = (UITouch) obj;
         PointF loc = touch.LocationInView(touch.get_View());
-        eventw[0] = new Pointer.Event.Impl(touch.get_Timestamp(), loc.get_X(), loc.get_Y(), true);
+        // transform the point based on our current orientation and scale
+        IPoint xloc = graphics.transformTouch(loc.get_X(), loc.get_Y());
+        eventw[0] = new Event.Impl(touch.get_Timestamp(), xloc.x(), xloc.y(), true);
         stop[0] = true;
       }
     }));

@@ -19,6 +19,8 @@ import com.google.gwt.dom.client.Document;
 import com.google.gwt.dom.client.Element;
 import com.google.gwt.dom.client.Node;
 
+import pythagoras.f.Point;
+
 import playn.core.Asserts;
 import playn.core.GroupLayer;
 import playn.core.GroupLayerImpl;
@@ -70,6 +72,11 @@ class HtmlGroupLayerDom extends HtmlLayerDom implements GroupLayer, ParentLayer 
   }
 
   @Override
+  public void addAt(Layer layer, float tx, float ty) {
+    impl.addAt(this, layer, tx, ty);
+  }
+
+  @Override
   public void remove(Layer layer) {
     Asserts.checkArgument(layer instanceof HtmlLayerDom);
     HtmlLayerDom hlayer = (HtmlLayerDom) layer;
@@ -112,6 +119,11 @@ class HtmlGroupLayerDom extends HtmlLayerDom implements GroupLayer, ParentLayer 
   public void onRemove() {
     super.onRemove();
     impl.onRemove(this);
+  }
+
+  @Override
+  public Layer hitTestDefault(Point p) {
+    return impl.hitTest(this, p);
   }
 
   @Override

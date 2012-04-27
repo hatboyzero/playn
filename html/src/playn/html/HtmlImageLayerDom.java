@@ -54,7 +54,7 @@ class HtmlImageLayerDom extends HtmlLayerDom implements ImageLayer {
     applySize();
   }
 
-  @Override
+  @Override @Deprecated
   public void clearSourceRect() {
     this.sourceRectSet = false;
     applyBackgroundSize();
@@ -124,7 +124,7 @@ class HtmlImageLayerDom extends HtmlLayerDom implements ImageLayer {
     applyBackgroundSize();
   }
 
-  @Override
+  @Override @Deprecated
   public void setSourceRect(float sx, float sy, float sw, float sh) {
     Asserts.checkState(!repeatX && !repeatY, "Cannot use source rect when repeating x or y");
     Asserts.checkArgument(sw != 0 && sh != 0); // Will cause div-by-zero

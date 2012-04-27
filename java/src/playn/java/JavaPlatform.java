@@ -15,28 +15,25 @@
  */
 package playn.java;
 
-import java.awt.Dimension;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
 import java.io.IOException;
 
-import javax.swing.JComponent;
-import javax.swing.JFrame;
+import org.lwjgl.LWJGLException;
+import org.lwjgl.opengl.Display;
 
 import playn.core.Analytics;
 import playn.core.Audio;
-import playn.core.PlayN;
 import playn.core.Game;
 import playn.core.Json;
 import playn.core.Keyboard;
 import playn.core.Log;
+import playn.core.Mouse;
 import playn.core.Net;
 import playn.core.Platform;
+import playn.core.PlayN;
 import playn.core.Pointer;
-import playn.core.Mouse;
-import playn.core.Touch;
-import playn.core.Storage;
 import playn.core.RegularExpression;
+import playn.core.Storage;
+import playn.core.Touch;
 import playn.core.json.JsonImpl;
 
 public class JavaPlatform implements Platform {
@@ -51,41 +48,58 @@ public class JavaPlatform implements Platform {
   // we try to squeeze a paint() near max bound of FRAME_TIME.
   private static final float FRAME_TIME = 10;
 
+  private static JavaPlatform instance;
+
   public static JavaPlatform register() {
-    JavaPlatform platform = new JavaPlatform();
-    PlayN.setPlatform(platform);
-    platform.init();
-    return platform;
+    String sfprop = System.getProperty("playn.scaleFactor");
+    if (sfprop != null) {
+      try {
+        return register(Float.parseFloat(sfprop));
+      } catch (Exception e) {
+        System.err.println("Invalid scaleFactor supplied '" + sfprop + "': " + e);
+        // fall through and register with scale factor 1
+      }
+    }
+    return register(1);
   }
 
-  private JComponent component;
-  private JFrame frame;
-  private Game game;
+  public static JavaPlatform register(float scaleFactor) {
+    // Guard against multiple-registration. This can happen when running tests in maven.
+    if (instance != null) {
+      return instance;
+    }
 
-  private JavaRegularExpression regularExpression = new JavaRegularExpression();
+    instance = new JavaPlatform(scaleFactor);
+    PlayN.setPlatform(instance);
+    instance.init();
+    return instance;
+  }
+
+  private JavaAnalytics analytics = new JavaAnalytics();
   private JavaAudio audio = new JavaAudio();
-  private JavaGraphics graphics;
-  private Json json = new JsonImpl();
-  private JavaKeyboard keyboard;
   private JavaLog log = new JavaLog();
   private JavaNet net = new JavaNet();
-  private JavaPointer pointer;
-  private JavaMouse mouse;
+  private JavaRegularExpression regex = new JavaRegularExpression();
   private JavaStorage storage = new JavaStorage();
-  private JavaAssets assets = new JavaAssets();
+  private JsonImpl json = new JsonImpl();
+  private JavaKeyboard keyboard = new JavaKeyboard();
+  private JavaPointer pointer = new JavaPointer();
+  private JavaGraphics graphics;
+  private JavaMouse mouse;
+  private JavaAssets assets;
 
   private int updateRate = 0;
-  private Analytics analytics = new JavaAnalytics();
+  private float accum = updateRate;
+  private double lastUpdateTime;
+  private double lastPaintTime;
 
-  private JavaPlatform() {
-    ensureFrame();
-    graphics = new JavaGraphics(frame, component);
-    keyboard = new JavaKeyboard(frame);
-    pointer = new JavaPointer(component);
-    mouse = new JavaMouse(component);
+  public JavaPlatform(float scaleFactor) {
+    graphics = new JavaGraphics(scaleFactor);
+    mouse = new JavaMouse(graphics);
+    assets = new JavaAssets(graphics, audio);
   }
 
-  private void init() {
+  protected void init() {
     storage.init();
   }
 
@@ -150,12 +164,6 @@ public class JavaPlatform implements Platform {
     return assets;
   }
 
-  /** @deprecated Use {@link #assets}. */
-  @Deprecated
-  public JavaAssets assetManager() {
-    return assets;
-  }
-
   @Override
   public float random() {
     return (float) Math.random();
@@ -164,10 +172,63 @@ public class JavaPlatform implements Platform {
   @Override
   public void run(final Game game) {
     this.updateRate = game.updateRate();
-    this.game = game;
+
+    try {
+      // initialize LWJGL (and show the display) now that the game has been initialized
+      graphics.init();
+      // now that the display is initialized we can init our mouse and keyboard
+      mouse.init();
+      keyboard.init();
+    } catch (LWJGLException e) {
+      throw new RuntimeException("Unrecoverable initialization error", e);
+    }
 
     game.init();
-    frame.setVisible(true);
+
+    while (!Display.isCloseRequested()) {
+      // Event handling.
+      mouse.update();
+      keyboard.update();
+      pointer.update();
+      net.update();
+
+      // Game loop.
+      double now = time();
+      float updateDelta = (float) (now - lastUpdateTime);
+      if (updateDelta > 1) {
+        updateDelta = updateDelta > MAX_DELTA ? MAX_DELTA : updateDelta;
+        lastUpdateTime = now;
+
+        if (updateRate == 0) {
+          game.update(updateDelta);
+          accum = 0;
+        } else {
+          accum += updateDelta;
+          while (accum > updateRate) {
+            game.update(updateRate);
+            accum -= updateRate;
+          }
+        }
+      }
+
+      float paintDelta = (float) (now - lastPaintTime);
+      if (paintDelta > FRAME_TIME) {
+        if (updateRate == 0) {
+          game.paint(0);
+        } else {
+          game.paint(accum / updateRate);
+        }
+
+        graphics.paintLayers();
+
+        lastPaintTime = now;
+      }
+
+      Display.sync(60);
+      Display.update();
+    }
+
+    System.exit(0);
   }
 
   @Override
@@ -180,78 +241,9 @@ public class JavaPlatform implements Platform {
     return Type.JAVA;
   }
 
-  private void ensureFrame() {
-    frame = new JFrame();
-    frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-
-    component = new JComponent() {
-      private float accum = updateRate;
-      private double lastUpdateTime;
-      private double lastPaintTime;
-      private boolean isPaintDirty;
-
-      @Override
-      public void paint(Graphics g) {
-        isPaintDirty = false; // clean by default
-
-        if (game != null) {
-          double now = time();
-          float updateDelta = (float)(now - lastUpdateTime);
-          if (updateDelta > 1) {
-            updateDelta = updateDelta > MAX_DELTA ? MAX_DELTA : updateDelta;
-            lastUpdateTime = now;
-
-            if (updateRate == 0) {
-              game.update(updateDelta);
-              accum = 0;
-              isPaintDirty = true; // we made a mess
-            } else {
-              accum += updateDelta;
-              while (accum > updateRate) {
-                game.update(updateRate);
-                accum -= updateRate;
-                isPaintDirty = true; // we made a mess
-              }
-            }
-          }
-
-          float paintDelta = (float)(now - lastPaintTime);
-          if (isPaintDirty || paintDelta > FRAME_TIME) {
-            if (updateRate == 0) {
-              game.paint(0);
-            } else {
-              game.paint(accum / updateRate);
-            }
-
-            int width = component.getWidth();
-            int height = component.getHeight();
-            JavaCanvas canvas = new JavaCanvas((Graphics2D) g, width, height);
-            canvas.clear();
-            graphics.rootLayer().paint(canvas);
-
-            lastPaintTime = now;
-          }
-        }
-
-        try {
-          Thread.sleep(1L);
-        } catch (InterruptedException e) {
-          // ignore
-        }
-        repaint();
-      }
-    };
-    component.setOpaque(true); // ensures graphics context is not cleared automatically
-    frame.add(component);
-    frame.setResizable(false);
-
-    component.setPreferredSize(new Dimension(640, 480));
-    frame.pack();
-  }
-
   @Override
   public RegularExpression regularExpression() {
-    return regularExpression;
+    return regex;
   }
 
   @Override
@@ -272,6 +264,6 @@ public class JavaPlatform implements Platform {
    * @param title the window title
    */
   public void setTitle(String title) {
-    frame.setTitle(title);
+    Display.setTitle(title);
   }
 }

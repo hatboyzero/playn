@@ -21,6 +21,7 @@ import playn.core.Image;
 import playn.core.ImageLayer;
 import playn.core.Layer;
 import playn.core.ResourceCallback;
+import playn.core.Path;
 import static playn.core.PlayN.*;
 
 public class CanvasTest extends Test {
@@ -68,7 +69,7 @@ public class CanvasTest extends Test {
 
     addTestCanvas(100, 100, "images/tile.png", new ImageDrawer() {
       public void draw(Canvas canvas, Image tile) {
-        canvas.setFillPattern(graphics().createPattern(tile));
+        canvas.setFillPattern(tile.toPattern());
         canvas.fillRect(0, 0, 100, 100);
       }
     });
@@ -91,17 +92,17 @@ public class CanvasTest extends Test {
       }
     });
 
-    addTestCanvas(100, 100, "images/pea.png", new ImageDrawer() {
-      public void draw(Canvas canvas, Image pea) {
+    addTestCanvas(100, 100, "images/orange.png", new ImageDrawer() {
+      public void draw(Canvas canvas, Image orange) {
         canvas.setFillColor(0xFF99CCFF);
         canvas.fillRect(0, 0, 100, 100);
 
         // draw an image normally, scaled, cropped, cropped and scaled, etc.
         float half = 37/2f;
-        canvas.drawImage(pea, 10, 10);
-        canvas.drawImage(pea, 55, 10, 37, 37, half, half, half, half);
-        canvas.drawImage(pea, 10, 55, 37, 37, half, 0, half, half);
-        canvas.drawImage(pea, 55, 55, 37, 37, half, half/2, half, half);
+        canvas.drawImage(orange, 10, 10);
+        canvas.drawImage(orange, 55, 10, 37, 37, half, half, half, half);
+        canvas.drawImage(orange, 10, 55, 37, 37, half, 0, half, half);
+        canvas.drawImage(orange, 55, 55, 37, 37, half, half/2, half, half);
       }
     });
 
@@ -120,6 +121,37 @@ public class CanvasTest extends Test {
 
     timeImg = graphics().createImage(100, 100);
     addTestLayer(100, 100, graphics().createImageLayer(timeImg));
+
+    addTestCanvas(100, 100, new Drawer() {
+      public void draw(Canvas canvas) {
+        // draw a rounded rect with bezier curves
+        Path path = canvas.createPath();
+        path.moveTo(10, 0);
+        path.lineTo(90, 0);
+        path.bezierTo(95, 0, 100, 5, 100, 10);
+        path.lineTo(100, 90);
+        path.bezierTo(100, 95, 95, 100, 90, 100);
+        path.lineTo(10, 100);
+        path.bezierTo(5, 100, 0, 95, 0, 90);
+        path.lineTo(0, 10);
+        path.bezierTo(0, 5, 5, 0, 10, 0);
+        path.close();
+        canvas.setFillGradient(graphics().createLinearGradient(
+                                 0, 0, 100, 100, new int[] { 0xFF0000FF, 0xFF00FF00 },
+                                 new float[] { 0, 1 }));
+        canvas.fillPath(path);
+      }
+    });
+
+    addTestCanvas(100, 100, new Drawer() {
+      public void draw(Canvas canvas) {
+        // draw a rounded rect directly
+        canvas.setFillGradient(graphics().createLinearGradient(
+                                 0, 0, 100, 100, new int[] { 0xFF0000FF, 0xFF00FF00 },
+                                 new float[] { 0, 1 }));
+        canvas.fillRoundRect(0, 0, 100, 100, 10);
+      }
+    });
   }
 
   @Override

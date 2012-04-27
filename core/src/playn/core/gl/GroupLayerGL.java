@@ -20,6 +20,8 @@ import playn.core.InternalTransform;
 import playn.core.Layer;
 import playn.core.ParentLayer;
 
+import pythagoras.f.Point;
+
 public class GroupLayerGL extends LayerGL implements GroupLayer, ParentLayer {
 
   private GroupLayerImpl<LayerGL> impl = new GroupLayerImpl<LayerGL>();
@@ -43,6 +45,11 @@ public class GroupLayerGL extends LayerGL implements GroupLayer, ParentLayer {
   public void add(int index, Layer layer) {
     Asserts.checkArgument(layer instanceof LayerGL);
     impl.add(this, index, (LayerGL) layer);
+  }
+
+  @Override
+  public void addAt(Layer layer, float tx, float ty) {
+    impl.addAt(this, layer, tx, ty);
   }
 
   @Override
@@ -82,6 +89,11 @@ public class GroupLayerGL extends LayerGL implements GroupLayer, ParentLayer {
   public void onRemove() {
     super.onRemove();
     impl.onRemove(this);
+  }
+
+  @Override
+  public Layer hitTestDefault(Point p) {
+    return impl.hitTest(this, p);
   }
 
   @Override

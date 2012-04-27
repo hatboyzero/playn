@@ -40,14 +40,21 @@ import android.util.Log;
 public class AndroidAssets extends AbstractAssets {
 
   private final AssetManager assets;
+  private final AndroidGraphics graphics;
+  private final AndroidAudio audio;
   private String pathPrefix = null;
 
-  AndroidAssets(AssetManager assets) {
+  AndroidAssets(AssetManager assets, AndroidGraphics graphics, AndroidAudio audio) {
     this.assets = assets;
+    this.graphics = graphics;
+    this.audio = audio;
   }
 
   public void setPathPrefix(String prefix) {
-    pathPrefix = prefix;
+    if (prefix.startsWith("/") || prefix.endsWith("/")) {
+      throw new IllegalArgumentException("Prefix must not start or end with '/'.");
+    }
+    pathPrefix = (prefix.length() == 0) ? prefix : (prefix + "/");
   }
 
   /**
@@ -55,16 +62,19 @@ public class AndroidAssets extends AbstractAssets {
    * {@link IOException} in case of failure.
    */
   private InputStream openAsset(String path) throws IOException {
-    // Insert a slash to make this consistent with the Java asset manager
-    InputStream is = getClass().getClassLoader().getResourceAsStream(pathPrefix + "/" + path);
+    InputStream is = getClass().getClassLoader().getResourceAsStream(pathPrefix + path);
     if (is == null)
-      throw new IOException("Unable to loader resource: " + path);
+      throw new IOException("Unable to load resource: " + pathPrefix + path);
     return is;
   }
 
   @Override
   protected Image doGetImage(String path) {
-    return new AndroidImage(AndroidPlatform.instance.graphics().ctx, doGetBitmap(path));
+    return createImage(graphics.ctx, doGetBitmap(path));
+  }
+
+  protected AndroidImage createImage(AndroidGLContext ctx, Bitmap bitmap) {
+    return new AndroidImage(ctx, bitmap);
   }
 
   /**
@@ -89,7 +99,7 @@ public class AndroidAssets extends AbstractAssets {
     BitmapFactory.Options options = new BitmapFactory.Options();
     options.inDither = true;
     // Prefer the bitmap config we computed from the window parameter
-    options.inPreferredConfig = AndroidPlatform.instance.graphics().preferredBitmapConfig;
+    options.inPreferredConfig = graphics.preferredBitmapConfig;
     // Never scale bitmaps based on device parameters
     options.inScaled = false;
     return BitmapFactory.decodeStream(is, null, options);
@@ -145,7 +155,7 @@ public class AndroidAssets extends AbstractAssets {
     }
 
     @Override
-    public void addCallback(ResourceCallback<Sound> callback) {
+    public void addCallback(ResourceCallback<? super Sound> callback) {
       callback.error(exception);
     }
   }
@@ -154,7 +164,7 @@ public class AndroidAssets extends AbstractAssets {
   protected Sound doGetSound(String path) {
     try {
       InputStream in = openAsset(path + ".mp3");
-      return AndroidPlatform.instance.audio().createSound(path + ".mp3", in);
+      return audio.createSound(path + ".mp3", in);
     } catch (IOException e) {
       log().error("Unable to load sound: " + path, e);
       return new ErrorSound(path, e);

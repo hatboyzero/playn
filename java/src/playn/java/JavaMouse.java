@@ -15,122 +15,60 @@
  */
 package playn.java;
 
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
-import java.awt.event.MouseMotionListener;
-import java.awt.event.MouseWheelEvent;
-import java.awt.event.MouseWheelListener;
+import org.lwjgl.LWJGLException;
+import org.lwjgl.input.Mouse;
+import org.lwjgl.opengl.Display;
 
-import javax.swing.JComponent;
+import pythagoras.f.Point;
 
-import playn.core.Mouse;
+import playn.core.MouseImpl;
+import playn.core.PlayN;
 
-class JavaMouse implements Mouse {
+class JavaMouse extends MouseImpl {
 
-  private Listener listener;
+  private final JavaGraphics graphics;
 
-  JavaMouse(JComponent frame) {
-    frame.addMouseMotionListener(new MouseMotionListener() {
-      @Override
-      public void mouseDragged(MouseEvent nativeEvent) {
-        // mouseMoved(MouseEvent) does not fire when dragged
-        if (listener != null) {
-          MotionEvent.Impl event = new MotionEvent.Impl(nativeEvent.getWhen(), nativeEvent.getX(),
-              nativeEvent.getY());
-          listener.onMouseMove(event);
-          if (event.getPreventDefault()) {
-            nativeEvent.consume();
-          }
-        }
-      }
-
-      @Override
-      public void mouseMoved(MouseEvent nativeEvent) {
-        if (listener != null) {
-          MotionEvent.Impl event = new MotionEvent.Impl(nativeEvent.getWhen(), nativeEvent.getX(),
-              nativeEvent.getY());
-          listener.onMouseMove(event);
-          if (event.getPreventDefault()) {
-            nativeEvent.consume();
-          }
-        }
-      }
-    });
-
-    frame.addMouseListener(new MouseListener() {
-      @Override
-      public void mouseClicked(MouseEvent e) {
-      }
-
-      @Override
-      public void mouseEntered(MouseEvent e) {
-      }
-
-      @Override
-      public void mouseExited(MouseEvent e) {
-      }
-
-      @Override
-      public void mousePressed(MouseEvent nativeEvent) {
-        if (listener != null) {
-          ButtonEvent.Impl event = new ButtonEvent.Impl(nativeEvent.getWhen(), nativeEvent.getX(),
-              nativeEvent.getY(), getMouseButton(nativeEvent));
-          listener.onMouseDown(event);
-          if (event.getPreventDefault()) {
-            nativeEvent.consume();
-          }
-        }
-      }
-
-      @Override
-      public void mouseReleased(MouseEvent nativeEvent) {
-        if (listener != null) {
-          ButtonEvent.Impl event = new ButtonEvent.Impl(nativeEvent.getWhen(), nativeEvent.getX(),
-              nativeEvent.getY(), getMouseButton(nativeEvent));
-          listener.onMouseUp(event);
-          if (event.getPreventDefault()) {
-            nativeEvent.consume();
-          }
-        }
-      }
-    });
-
-    frame.addMouseWheelListener(new MouseWheelListener() {
-      @Override
-      public void mouseWheelMoved(MouseWheelEvent nativeEvent) {
-        if (listener != null) {
-          WheelEvent.Impl event = new WheelEvent.Impl(nativeEvent.getWhen(),
-              nativeEvent.getWheelRotation());
-          listener.onMouseWheelScroll(event);
-          if (event.getPreventDefault()) {
-            nativeEvent.consume();
-          }
-        }
-      }
-    });
+  public JavaMouse(JavaGraphics graphics) {
+    this.graphics = graphics;
   }
 
-  @Override
-  public void setListener(Listener listener) {
-    this.listener = listener;
+  void init() throws LWJGLException {
+    Mouse.create();
   }
 
-  /**
-   * Return the {@link Mouse} button given a {@link MouseEvent}
-   *
-   * @param e MouseEvent
-   * @return {@link Mouse} button corresponding to the event
-   */
-  protected static int getMouseButton(MouseEvent e) {
-    switch (e.getButton()) {
-      case (MouseEvent.BUTTON1):
-        return Mouse.BUTTON_LEFT;
-      case (MouseEvent.BUTTON2):
-        return Mouse.BUTTON_MIDDLE;
-      case (MouseEvent.BUTTON3):
-        return Mouse.BUTTON_RIGHT;
-      default:
-        return e.getButton();
+  void update() {
+    JavaPointer pointer = (JavaPointer) PlayN.pointer();
+
+    while (Mouse.next()) {
+      double time = (double) (Mouse.getEventNanoseconds() / 1000);
+      int btn = getButton(Mouse.getEventButton());
+      Point m = new Point(Mouse.getEventX(), Display.getHeight() - Mouse.getEventY() - 1);
+      graphics.transformMouse(m);
+
+      if (btn != -1) {
+        if (Mouse.getEventButtonState()) {
+          onMouseDown(new ButtonEvent.Impl(time, m.x, m.y, btn));
+          pointer.onMouseDown(time, m.x, m.y);
+        } else {
+          onMouseUp(new ButtonEvent.Impl(time, m.x, m.y, btn));
+          pointer.onMouseUp(time, m.x, m.y);
+        }
+      } else if (Mouse.getEventDWheel() != 0) {
+        onMouseWheelScroll(new WheelEvent.Impl(time, Mouse.getEventDWheel()));
+      } else {
+        onMouseMove(new MotionEvent.Impl(time, m.x, m.y));
+        pointer.onMouseMove(time, m.x, m.y);
+      }
+    }
+  }
+
+  protected static int getButton(int lwjglButton) {
+    switch (lwjglButton) {
+    case 0:  return BUTTON_LEFT;
+    case 2:  return BUTTON_MIDDLE;
+    case 1:  return BUTTON_RIGHT;
+    default: return lwjglButton;
     }
   }
 }
+

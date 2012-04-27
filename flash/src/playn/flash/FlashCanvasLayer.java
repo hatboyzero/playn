@@ -68,6 +68,18 @@ public class FlashCanvasLayer extends FlashLayer implements CanvasLayer {
   @FlashImport({"com.googlecode.flashcanvas.CanvasRenderingContext2D"})
   final static class Context2d extends JavaScriptObject {
 
+  public native void setGlobalCompositeOperation(String composite) /*-{
+     this.globalCompositeOperation = composite;
+  }-*/;
+
+  public native void arc(float x, float y, float radius, float sa, float ea, boolean anticlockwise) /*-{
+      this.arc(x, y, radius, sa, ea, anticlockwise);
+  }-*/;
+
+  public native void setStrokeWidth(float w) /*-{
+      this.lineWidth = w;
+  }-*/;
+
       /**
    * Enum for text baseline style.
    */
@@ -207,13 +219,18 @@ public class FlashCanvasLayer extends FlashLayer implements CanvasLayer {
       this.arcTo(curX, curY, x, y, radius);
     }-*/;
 
+    public native void bezierCurveTo(double c1x, double c1y, double c2x, double c2y,
+                                     double x, double y)  /*-{
+      this.bezierCurveTo(c1x, c1y, c2x, c2y, x, y);
+    }-*/;
+
     public native void quadraticCurveTo(
         double cpx, double cpy, double x, double y) /*-{
       this.quadraticCurveTo(cpx, cpy, x, y);
     }-*/;
 
-    public native void close() /*-{
-      this.close();
+    public native void closePath() /*-{
+      this.closePath();
     }-*/;
 
     public native void fill() /*-{
@@ -251,7 +268,7 @@ public class FlashCanvasLayer extends FlashLayer implements CanvasLayer {
           public native int getWidth() /*-{
               return this.width;
           }-*/;
-          
+
           public native int getHeight() /*-{
               return this.height-4;
           }-*/;

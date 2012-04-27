@@ -15,79 +15,29 @@
  */
 package playn.java;
 
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
-import java.awt.event.MouseMotionListener;
+import playn.core.PointerImpl;
 
-import javax.swing.JComponent;
+class JavaPointer extends PointerImpl {
 
-import playn.core.Pointer;
+  private boolean mouseDown;
 
-// TODO(pdr): add touch support.
-class JavaPointer implements Pointer {
-
-  private Listener listener;
-
-  JavaPointer(JComponent frame) {
-    frame.addMouseMotionListener(new MouseMotionListener() {
-      @Override
-      public void mouseDragged(MouseEvent nativeEvent) {
-        if (listener != null) {
-          Event.Impl event = new Event.Impl(nativeEvent.getWhen(), nativeEvent.getX(),
-              nativeEvent.getY(), false);
-          listener.onPointerDrag(event);
-          if (event.getPreventDefault()) {
-            nativeEvent.consume();
-          }
-        }
-      }
-
-      @Override
-      public void mouseMoved(MouseEvent e) {
-      }
-    });
-
-    frame.addMouseListener(new MouseListener() {
-      @Override
-      public void mouseClicked(MouseEvent e) {
-      }
-
-      @Override
-      public void mouseEntered(MouseEvent e) {
-      }
-
-      @Override
-      public void mouseExited(MouseEvent e) {
-      }
-
-      @Override
-      public void mousePressed(MouseEvent nativeEvent) {
-        if (listener != null) {
-          Event.Impl event = new Event.Impl(nativeEvent.getWhen(), nativeEvent.getX(),
-              nativeEvent.getY(), false);
-          listener.onPointerStart(event);
-          if (event.getPreventDefault()) {
-            nativeEvent.consume();
-          }
-        }
-      }
-
-      @Override
-      public void mouseReleased(MouseEvent nativeEvent) {
-        if (listener != null) {
-          Event.Impl event = new Event.Impl(nativeEvent.getWhen(), nativeEvent.getX(),
-              nativeEvent.getY(), false);
-          listener.onPointerEnd(event);
-          if (event.getPreventDefault()) {
-            nativeEvent.consume();
-          }
-        }
-      }
-    });
+  void onMouseDown(double time, float x, float y) {
+    onPointerStart(new Event.Impl(time, x, y, false), false);
+    mouseDown = true;
   }
 
-  @Override
-  public void setListener(Listener listener) {
-    this.listener = listener;
+  void onMouseUp(double time, float x, float y) {
+    onPointerEnd(new Event.Impl(time, x, y, false), false);
+    mouseDown = false;
+  }
+
+  void onMouseMove(double time, float x, float y) {
+    if (mouseDown) {
+      onPointerDrag(new Event.Impl(time, x, y, false), false);
+    }
+  }
+
+  void update() {
+    // Do nothing -- JavaMouse takes care of pointer events.
   }
 }

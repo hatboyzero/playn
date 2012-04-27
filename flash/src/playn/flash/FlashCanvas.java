@@ -52,6 +52,11 @@ class FlashCanvas implements Canvas {
   }
 
   @Override
+  public Path createPath() {
+    return new FlashPath();
+  }
+
+  @Override
   public Canvas drawImage(Image img, float x, float y) {
     Asserts.checkArgument(img instanceof FlashImage);
     dirty = true;
@@ -87,7 +92,7 @@ class FlashCanvas implements Canvas {
   @Override
   public Canvas drawLine(float x0, float y0, float x1, float y1) {
     context2d.beginPath();
-    context2d.moveTo(y0, y1);
+    context2d.moveTo(x0, y0);
     context2d.lineTo(x1, y1);
     context2d.stroke();
     dirty = true;
@@ -97,6 +102,14 @@ class FlashCanvas implements Canvas {
   @Override
   public Canvas drawPoint(float x, float y) {
     context2d.fillRect(x, y, 1, 1);
+    dirty = true;
+    return this;
+  }
+
+  @Override
+  public Canvas fillRoundRect(float x, float y, float w, float h, float radius) {
+    addRoundRectPath(x, y, width, height, radius);
+    context2d.fill();
     dirty = true;
     return this;
   }
@@ -119,6 +132,10 @@ class FlashCanvas implements Canvas {
   @Override
   public Canvas fillCircle(float x, float y, float radius) {
     dirty = true;
+    context2d.beginPath();
+    context2d.arc(x, y, radius, 0, (float) (Math.PI*2), true);
+    context2d.closePath();
+    context2d.fill();
     return this;
   }
 
@@ -174,6 +191,7 @@ class FlashCanvas implements Canvas {
 
   @Override
   public Canvas setCompositeOperation(Composite composite) {
+    context2d.setGlobalCompositeOperation(composite.name().toLowerCase().replace('_', '-'));
     return this;
   }
 
@@ -183,7 +201,7 @@ class FlashCanvas implements Canvas {
         + ((color >> 16) & 0xff) + ","
         + ((color >> 8) & 0xff) + ","
         + (color & 0xff) + ","
-        + ((color >> 24) & 0xff) + ")");
+        + ((color >> 24) & 0xff)/255.0 + ")");
     return this;
   }
 
@@ -224,6 +242,7 @@ class FlashCanvas implements Canvas {
 
   @Override
   public Canvas setStrokeWidth(float w) {
+    context2d.setStrokeWidth(w);
     return this;
   }
 
@@ -255,6 +274,14 @@ class FlashCanvas implements Canvas {
   }
 
   @Override
+  public Canvas strokeRoundRect(float x, float y, float w, float h, float radius) {
+    addRoundRectPath(x, y, width, height, radius);
+    context2d.stroke();
+    dirty = true;
+    return this;
+  }
+
+  @Override
   public Canvas transform(float m11, float m12, float m21, float m22, float dx,
       float dy) {
     context2d.transform(m11, m12, m21, m22, dx, dy);
@@ -272,15 +299,6 @@ class FlashCanvas implements Canvas {
     return width;
   }
 
-
-  void clearDirty() {
-    dirty = false;
-  }
-
-  boolean dirty() {
-    return dirty;
-  }
-
   public void quadraticCurveTo(float cpx, float cpy, float x, float y) {
      context2d.quadraticCurveTo(cpx, cpy, x, y);
   }
@@ -294,7 +312,7 @@ class FlashCanvas implements Canvas {
   }
 
   public void close() {
-    context2d.close();
+    context2d.closePath();
   }
 
   public BitmapData bitmapData() {
@@ -303,5 +321,24 @@ class FlashCanvas implements Canvas {
 
   public Context2d getContext2d() {
     return context2d;
+  }
+
+  void clearDirty() {
+    dirty = false;
+  }
+
+  boolean dirty() {
+    return dirty;
+  }
+
+  private void addRoundRectPath(float x, float y, float width, float height, float radius) {
+    float midx = x + width/2, midy = y + height/2, maxx = x + width, maxy = y + height;
+    context2d.beginPath();
+    context2d.moveTo(x, midy);
+    context2d.arcTo(x, y, midx, y, radius);
+    context2d.arcTo(maxx, y, maxx, midy, radius);
+    context2d.arcTo(maxx, maxy, midx, maxy, radius);
+    context2d.arcTo(x, maxy, x, midy, radius);
+    context2d.closePath();
   }
 }

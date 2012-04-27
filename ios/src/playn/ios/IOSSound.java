@@ -15,39 +15,72 @@
  */
 package playn.ios;
 
-import playn.core.ResourceCallback;
+import cli.MonoTouch.AVFoundation.AVAudioPlayer;
+import cli.MonoTouch.Foundation.NSError;
+import cli.MonoTouch.Foundation.NSUrl;
 
+import playn.core.Asserts;
+import playn.core.PlayN;
+import playn.core.ResourceCallback;
 import playn.core.Sound;
 
-class IOSSound implements Sound
+/**
+ * An implementation of Sound using the AVAudioPlayer.
+ */
+public class IOSSound implements Sound
 {
+  private AVAudioPlayer player;
+
+  public IOSSound (String path) {
+    NSError[] error = new NSError[1];
+    player = AVAudioPlayer.FromUrl(NSUrl.FromFilename(path), error);
+    if (error[0] != null) {
+      PlayN.log().warn("Error loading sound [" + path + ", " + error[0] + "]");
+      return;
+    }
+    player.PrepareToPlay();
+  }
+
   @Override
   public boolean play() {
-    return false; // TODO
+    if (player == null) return false;
+    player.set_CurrentTime(0);
+    return player.Play();
   }
 
   @Override
   public void stop() {
-    // TODO
+    if (player != null) {
+      player.Pause();
+      player.set_CurrentTime(0);
+    }
   }
 
   @Override
   public void setLooping(boolean looping) {
-    // TODO
+    if (player != null) player.set_NumberOfLoops(looping ? -1 : 0);
   }
 
   @Override
   public void setVolume(float volume) {
-    // TODO
+    if (player != null) player.set_Volume(volume);
   }
 
   @Override
   public boolean isPlaying() {
-    return false; // TODO
+    return player != null && player.get_Playing();
   }
 
   @Override
-  public void addCallback(ResourceCallback<Sound> callback) {
-    callback.done(this); // we're always ready
+  public void addCallback(ResourceCallback<? super Sound> callback) {
+    // non-null players are always ready
+    if (player != null) callback.done(this);
+  }
+
+  public void dispose() {
+    if (player != null) {
+      player.Dispose();
+      player = null;
+    }
   }
 }

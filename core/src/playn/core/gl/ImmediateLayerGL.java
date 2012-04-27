@@ -15,8 +15,8 @@
  */
 package playn.core.gl;
 
-import pythagoras.f.MathUtil;
 import pythagoras.f.Point;
+import pythagoras.f.Vector;
 
 import playn.core.ImmediateLayer;
 import playn.core.InternalTransform;
@@ -38,6 +38,7 @@ public class ImmediateLayerGL extends LayerGL implements ImmediateLayer {
   public static class Clipped extends ImmediateLayerGL implements ImmediateLayer.Clipped {
     private final int width, height;
     private Point pos = new Point();
+    private Vector size = new Vector();
 
     public Clipped(GLContext ctx, final int width, final int height, Renderer renderer) {
       super(ctx, renderer, new ImmediateSurfaceGL(ctx) {
@@ -76,7 +77,8 @@ public class ImmediateLayerGL extends LayerGL implements ImmediateLayer {
 
     protected void render(InternalTransform xform) {
       xform.transform(pos.set(0, 0), pos);
-      ctx.startClipped(MathUtil.ifloor(pos.x), MathUtil.ifloor(pos.y), width, height);
+      xform.transform(size.set(width, height), size);
+      ctx.startClipped((int) pos.x, (int) pos.y, (int) Math.abs(size.x), (int) Math.abs(size.y));
       try {
         super.render(xform);
       } finally {

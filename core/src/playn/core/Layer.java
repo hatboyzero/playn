@@ -35,6 +35,15 @@ import pythagoras.f.Transform;
  */
 public interface Layer {
 
+  /** Used to customize a layer's hit testing mechanism. */
+  public interface HitTester {
+    /** Returns {@code layer}, or a child of {@code layer} if the supplied coordinate (which is in
+     * {@code layer}'s coordinate system) hits {@code layer}, or one of its children. This allows a
+     * layer to customize the default hit testing approach, which is to simply check whether the
+     * point intersects a layer's bounds. See {@link Layer#hitTest}. */
+    Layer hitTest (Layer layer, Point p);
+  }
+
   /**
    * Destroys this layer, removing it from its parent layer. Any resources associated with this
    * layer are freed, and it cannot be reused after being destroyed. Destroying a layer that has
@@ -67,6 +76,23 @@ public interface Layer {
    * its children will not be rendered.
    */
   void setVisible(boolean visible);
+
+  /**
+   * Returns true if this layer reacts to clicks and touches. If a layer is interactive, it will
+   * respond to {@link #hitTest}, which forms the basis for the click and touch processing provided
+   * by {@link Pointer#addListener}, {@link Touch#addListener} and {@link Mouse#addListener}.
+   */
+  boolean interactive();
+
+  /**
+   * Configures this layer as reactive to clicks and touches, or not. Note that a layer's
+   * interactivity is automatically activated when a listener is added to the layer (or to a child
+   * of a {@link GroupLayer}) via {@link Pointer#addListener}, etc. Also a {@link GroupLayer} will
+   * be made non-interactive automatically if an event is dispatched to it and it discovers that it
+   * has no interactive children. Manual management of interactivity is thus generally only useful
+   * for "leaf" nodes in the scene graph.
+   */
+  void setInteractive(boolean interactive);
 
   /**
    * Return the global alpha value for this layer.
@@ -173,6 +199,72 @@ public interface Layer {
   void setRotation(float angle);
 
   /**
+   * Tests whether the supplied (layer relative) point "hits" this layer or any of its children. By
+   * default a hit is any point that falls in a layer's bounding box. A group layer checks its
+   * children for hits.
+   *
+   * <p>Note that this method mutates the supplied point. If a layer is hit, the point will contain
+   * the original point as translated into that layer's coordinate system. If no layer is hit, the
+   * point will be changed to an undefined value.</p>
+   *
+   * @return this layer if it was the hit layer, a child of this layer if a child of this layer was
+   * hit, or null if neither this layer, nor its children were hit.
+   */
+  Layer hitTest(Point p);
+
+  /**
+   * Like {@link #hitTest} except that it ignores a configured {@link HitTester}. This allows one
+   * to configure a hit tester which checks custom properties and then falls back on the default
+   * hit testing implementation.
+   */
+  Layer hitTestDefault(Point p);
+
+  /**
+   * Configures a custom hit tester for this layer. May also be called with null to clear out any
+   * custom hit tester.
+   */
+  void setHitTester (HitTester tester);
+
+  /**
+   * Registers a listener with this layer that will be notified if a click/touch event happens
+   * within its bounds. Events dispatched to this listener will have their {@link Event#localX} and
+   * {@link Event#localY} values set to the coordinates of the click/touch as transformed into this
+   * layer's coordinate system. {@link Event#x} and {@link Event#y} will always contain the screen
+   * (global) coordinates of the click/touch.
+   *
+   * <p>When a listener is added, the layer and all of its parents are marked as interactive.
+   * Interactive layers intercept touches/clicks. When all listeners are disconnected (including
+   * Mouse and Touch listeners), the layer will be marked non-interactive. Its parents are lazily
+   * marked non-interactive as it is discovered that they have no interactive children. Thus if you
+   * require that a layer continue to intercept click/touch events to prevent them from being
+   * dispatched to layers "below" it, you must register a NOOP listener on the layer, or manually
+   * call {@link #setInteractive} after removing the last listener.</p>
+   */
+  Connection addListener(Pointer.Listener listener);
+
+  /**
+   * Registers a listener with this layer that will be notified if a mouse event happens within its
+   * bounds. Events dispatched to this listener will have their {@link Event#localX} and {@link
+   * Event#localY} values set to the coordinates of the mouse as transformed into this layer's
+   * coordinate system. {@link Event#x} and {@link Event#y} will always contain the screen (global)
+   * coordinates of the mouse.
+   *
+   * <p>Note that mouse wheel events are not dispatched, as they lack coordinates. If a game wishes
+   * to determine the layer over which the mouse is hovering when wheel events are dispatched, it
+   * can register a global mouse-movement handler to track the position of the mouse, and use the
+   * latest position to determine which layer is under the mouse at the time of wheeling.</p>
+   *
+   * <p>When a listener is added, the layer and all of its parents are marked as interactive.
+   * Interactive layers intercept mice events. When all listeners are disconnected (including
+   * Pointer and Touch listeners), the layer will be marked non-interactive. Its parents are lazily
+   * marked non-interactive as it is discovered that they have no interactive children. Thus if you
+   * require that a layer continue to intercept mouse events to prevent them from being dispatched
+   * to layers "below" it, you must register a NOOP listener on the layer, or manually call {@link
+   * #setInteractive} after removing the last listener.</p>
+   */
+  Connection addListener(Mouse.Listener listener);
+
+  /**
    * Interface for {@link Layer}s containing explicit sizes.
    */
   public interface HasSize extends Layer {
@@ -246,7 +338,7 @@ public interface Layer {
      */
     public static Point layerToParent(Layer layer, Layer parent, float x, float y) {
       Point into = new Point(x, y);
-      return layerToParent(layer, parent, into.set(x, y), into);
+      return layerToParent(layer, parent, into, into);
     }
 
     /**
@@ -275,9 +367,22 @@ public interface Layer {
      * into {@code into}, which is returned for convenience.
      */
     public static Point parentToLayer(Layer layer, IPoint point, Point into) {
-      into = layer.transform().inverseTransform(point, into);
+      layer.transform().inverseTransform(point, into);
       into.x += layer.originX();
       into.y += layer.originY();
+      return into;
+    }
+
+    /**
+     * Converts the supplied point from coordinates relative to the specified parent to coordinates
+     * relative to the specified child layer. The results are stored into {@code into}, which is
+     * returned for convenience.
+     */
+    public static Point parentToLayer(Layer parent, Layer layer, IPoint point, Point into) {
+      Layer immediateParent = layer.parent();
+      if (immediateParent != parent)
+        point = parentToLayer(parent, immediateParent, point, into);
+      parentToLayer(layer, point, into);
       return into;
     }
 

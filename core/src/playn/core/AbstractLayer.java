@@ -13,6 +13,7 @@
  */
 package playn.core;
 
+import pythagoras.f.Point;
 import pythagoras.f.Transform;
 
 import playn.core.Layer;
@@ -23,10 +24,28 @@ import playn.core.Layer;
  */
 public abstract class AbstractLayer implements Layer {
 
+  /** Used to dispatch pointer/touch/mouse events to layers. */
+  public interface Interaction<L> {
+    void interact(L listener);
+  }
+
+  protected static class Interactor<L> {
+    final Class<L> listenerType;
+    final L listener;
+    Interactor<?> next;
+
+    Interactor(Class<L> listenerType, L listener, Interactor<?> next) {
+      this.listenerType = listenerType;
+      this.listener = listener;
+      this.next = next;
+    }
+  }
+
   protected static enum Flag {
     DESTROYED(1 << 0),
     VISIBLE(1 << 1),
-    SHOWN(1 << 2); // used by HtmlLayerDom
+    INTERACTIVE(1 << 2),
+    SHOWN(1 << 3); // used by HtmlLayerDom
 
     public final int bitmask;
 
@@ -42,6 +61,8 @@ public abstract class AbstractLayer implements Layer {
   protected float alpha;
   protected float depth;
   protected int flags;
+  protected Interactor<?> rootInteractor;
+  protected HitTester hitTester;
 
   protected AbstractLayer() {
     this(new StockInternalTransform());
@@ -74,6 +95,21 @@ public abstract class AbstractLayer implements Layer {
   @Override
   public void setVisible(boolean visible) {
     setFlag(Flag.VISIBLE, visible);
+  }
+
+  @Override
+  public boolean interactive() {
+    return isSet(Flag.INTERACTIVE);
+  }
+
+  @Override
+  public void setInteractive(boolean interactive) {
+    if (interactive() == interactive) // NOOP!
+      return;
+    // if we're being made interactive, active our parent as well, if we have one
+    if (interactive && parent != null)
+      parent.setInteractive(interactive);
+    setFlag(Flag.INTERACTIVE, interactive);
   }
 
   @Override
@@ -147,6 +183,21 @@ public abstract class AbstractLayer implements Layer {
   }
 
   @Override
+  public Layer hitTest(Point p) {
+    return (hitTester == null) ? hitTestDefault(p) : hitTester.hitTest(this, p);
+  }
+
+  @Override
+  public Layer hitTestDefault(Point p) {
+    return (p.x >= 0 && p.y >= 0 && p.x < width() && p.y < height()) ? this : null;
+  }
+
+  @Override
+  public void setHitTester (HitTester tester) {
+    hitTester = tester;
+  }
+
+  @Override
   public Transform transform() {
     return transform;
   }
@@ -154,6 +205,27 @@ public abstract class AbstractLayer implements Layer {
   @Override
   public GroupLayer parent() {
     return parent;
+  }
+
+  @Override
+  public Connection addListener(Pointer.Listener listener) {
+    return addInteractor(Pointer.Listener.class, listener);
+  }
+
+  @Override
+  public Connection addListener(Mouse.Listener listener) {
+    return addInteractor(Mouse.Listener.class, listener);
+  }
+
+  // width() and height() exist so that we can share hitTest among all layer implementations;
+  // GroupLayer, which does not have a size, overrides hitTest to properly test its children;
+  // (non-Clipped) ImmediateLayer inherits this "no size" and always returns null for hitTest
+  public float width() {
+    return 0;
+  }
+
+  public float height() {
+    return 0;
   }
 
   public void onAdd() {
@@ -177,5 +249,53 @@ public abstract class AbstractLayer implements Layer {
     } else {
       flags &= ~flag.bitmask;
     }
+  }
+
+  <L> void interact(Class<L> listenerType, Interaction<L> interaction) {
+    interact(listenerType, interaction, rootInteractor);
+  }
+
+  boolean hasInteractors() {
+    return rootInteractor != null;
+  }
+
+  // dispatch interactions recursively, so as to dispatch in the order they were added; we assume
+  // one will not have such a large number of listeners registered on a single layer that this will
+  // blow the stack; note that this also avoids issues with interactor modifications during
+  // dispatch: we essentially build a list of interactors to which to dispatch on the stack, before
+  // dispatching to any interactors; if an interactor is added or removed during dispatch, it
+  // neither affects, nor conflicts with, the current dispatch
+  private <L> void interact(Class<L> type, Interaction<L> interaction, Interactor<?> current) {
+    if (current == null)
+      return;
+    interact(type, interaction, current.next);
+    if (current.listenerType == type) {
+      @SuppressWarnings("unchecked") L listener = (L)current.listener;
+      interaction.interact(listener);
+    }
+  }
+
+  private <L> Connection addInteractor(Class<L> listenerType, L listener) {
+    final Interactor<L> newint = new Interactor<L>(listenerType, listener, rootInteractor);
+    rootInteractor = newint;
+    // note that we (and our parents) are now interactive
+    setInteractive(true);
+    return new Connection() {
+      public void disconnect() {
+        rootInteractor = removeInteractor(rootInteractor, newint);
+        // if we have no more interactors, become non-interactive
+        if (rootInteractor == null)
+          setInteractive(false);
+      }
+    };
+  }
+
+  private Interactor<?> removeInteractor(Interactor<?> current, Interactor<?> target) {
+    if (current == null)
+      return null;
+    if (current == target)
+      return current.next;
+    current.next = removeInteractor(current.next, target);
+    return current;
   }
 }

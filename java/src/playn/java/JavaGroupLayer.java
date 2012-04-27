@@ -15,6 +15,8 @@
  */
 package playn.java;
 
+import pythagoras.f.Point;
+
 import playn.core.Asserts;
 import playn.core.GroupLayer;
 import playn.core.GroupLayerImpl;
@@ -40,6 +42,11 @@ class JavaGroupLayer extends JavaLayer implements GroupLayer, ParentLayer {
   public void add(int index, Layer layer) {
     Asserts.checkArgument(layer instanceof JavaLayer);
     impl.add(this, index, (JavaLayer) layer);
+  }
+
+  @Override
+  public void addAt(Layer layer, float tx, float ty) {
+    impl.addAt(this, layer, tx, ty);
   }
 
   @Override
@@ -79,6 +86,11 @@ class JavaGroupLayer extends JavaLayer implements GroupLayer, ParentLayer {
   public void onRemove() {
     super.onRemove();
     impl.onRemove(this);
+  }
+
+  @Override
+  public Layer hitTestDefault(Point p) {
+    return impl.hitTest(this, p);
   }
 
   @Override

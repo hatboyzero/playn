@@ -19,7 +19,6 @@ import java.util.HashMap;
 import com.google.gwt.canvas.dom.client.CanvasGradient;
 import com.google.gwt.canvas.dom.client.CanvasPattern;
 import com.google.gwt.canvas.dom.client.Context2d;
-import com.google.gwt.canvas.dom.client.Context2d.Repetition;
 import com.google.gwt.canvas.dom.client.CssColor;
 import com.google.gwt.dom.client.CanvasElement;
 import com.google.gwt.dom.client.Document;
@@ -38,6 +37,7 @@ import playn.core.Path;
 import playn.core.Pattern;
 import playn.core.TextFormat;
 import playn.core.TextLayout;
+import playn.core.gl.GL20;
 
 public abstract class HtmlGraphics implements Graphics {
 
@@ -114,18 +114,14 @@ public abstract class HtmlGraphics implements Graphics {
     return new HtmlGradient(gradient);
   }
 
-  @Override
+  @Override @Deprecated
   public Path createPath() {
     return new HtmlPath();
   }
 
-  @Override
+  @Override @Deprecated
   public Pattern createPattern(Image image) {
-    Asserts.checkArgument(image instanceof HtmlImage);
-    HtmlImage htmlImage = (HtmlImage) image;
-    ImageElement elem = htmlImage.img.cast();
-    CanvasPattern pattern = dummyCtx.createPattern(elem, Repetition.REPEAT);
-    return new HtmlPattern(htmlImage, pattern);
+    return image.toPattern();
   }
 
   @Override
@@ -166,6 +162,16 @@ public abstract class HtmlGraphics implements Graphics {
     rootElement.getStyle().setHeight(height, Unit.PX);
   }
 
+  @Override
+  public float scaleFactor() {
+    return 1;
+  }
+
+  @Override
+  public GL20 gl20() {
+    throw new UnsupportedOperationException();
+  }
+
   HtmlFontMetrics getFontMetrics(Font font) {
     HtmlFontMetrics metrics = fontMetrics.get(font);
     if (metrics == null) {
@@ -192,6 +198,8 @@ public abstract class HtmlGraphics implements Graphics {
   }
 
   abstract Element rootElement();
+
+  abstract void preparePaint();
 
   abstract void paintLayers();
 }

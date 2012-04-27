@@ -15,40 +15,23 @@
  */
 package playn.java;
 
-import playn.core.Pattern;
-
 import java.awt.TexturePaint;
-import java.awt.geom.Rectangle2D;
-import java.awt.image.BufferedImage;
 
-class JavaPattern implements Pattern {
+import playn.core.gl.GLPattern;
+import playn.core.gl.ImageGL;
 
-  TexturePaint paint;
+class JavaPattern implements GLPattern {
 
-  static Pattern create(JavaImage img) {
-    // Apparently we need to know the size of the image to specify the anchor
-    // rectangle properly. We have to recreate the TexturePaint() when the image
-    // size is known.
-    return new JavaPattern(createTexture(img.img, 1, 1));
-  }
+  private final ImageGL image;
+  final TexturePaint paint;
 
-  private static TexturePaint createTexture(BufferedImage img, int width,
-      int height) {
-    return new TexturePaint(img, new Rectangle2D.Double(0, 0, width, height));
-  }
-
-  JavaPattern(TexturePaint paint) {
+  JavaPattern(ImageGL image, TexturePaint paint) {
+    this.image = image;
     this.paint = paint;
   }
 
-  void updateSize() {
-    BufferedImage img = paint.getImage();
-    int imageWidth = img.getWidth();
-    int imageHeight = img.getHeight();
-    double anchorWidth = paint.getAnchorRect().getWidth();
-    double anchorHeight = paint.getAnchorRect().getHeight();
-    if ((imageWidth != anchorWidth) || (imageHeight != anchorHeight)) {
-      paint = createTexture(img, imageWidth, imageHeight);
-    }
+  @Override
+  public ImageGL image() {
+    return image;
   }
 }

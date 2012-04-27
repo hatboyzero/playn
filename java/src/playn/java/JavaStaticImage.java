@@ -22,17 +22,18 @@ import java.util.List;
 import playn.core.Image;
 import playn.core.ResourceCallback;
 
-class JavaStaticImage extends JavaImage {
+public class JavaStaticImage extends JavaImage {
 
-  private List<ResourceCallback<Image>> callbacks;
+  private List<ResourceCallback<? super Image>> callbacks;
 
-  JavaStaticImage(final BufferedImage img) {
-    super(null);
+  public JavaStaticImage(JavaGLContext ctx, final BufferedImage img) {
+    super(ctx, null);
+
     JavaAssets.doResourceAction(new Runnable() {
       public void run () {
         JavaStaticImage.this.img = img;
         if (callbacks != null) {
-          for (ResourceCallback<Image> callback : callbacks)
+          for (ResourceCallback<? super Image> callback : callbacks)
             callback.done(JavaStaticImage.this);
           callbacks = null;
         }
@@ -41,13 +42,18 @@ class JavaStaticImage extends JavaImage {
   }
 
   @Override
-  public void addCallback(ResourceCallback<Image> callback) {
+  public void addCallback(ResourceCallback<? super Image> callback) {
     if (img != null)
       callback.done(this);
     else {
       if (callbacks == null)
-        callbacks = new ArrayList<ResourceCallback<Image>>();
+        callbacks = new ArrayList<ResourceCallback<? super Image>>();
       callbacks.add(callback);
     }
+  }
+
+  @Override
+  public Image transform(BitmapTransformer xform) {
+    return new JavaStaticImage(ctx, ((JavaBitmapTransformer) xform).transform(img));
   }
 }

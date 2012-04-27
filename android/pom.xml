@@ -4,7 +4,7 @@
   <parent>
     <groupId>com.googlecode.playn</groupId>
     <artifactId>playn-project</artifactId>
-    <version>1.2-SNAPSHOT</version>
+    <version>1.3-SNAPSHOT</version>
   </parent>
 
   <artifactId>playn-android</artifactId>
@@ -18,14 +18,6 @@
     <dependency>
       <groupId>com.googlecode.playn</groupId>
       <artifactId>playn-core</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-
-    <!-- needed because Android uses the same JSON code as playn-java;
-         that should be factored into a library shared by both backends -->
-    <dependency>
-      <groupId>com.googlecode.playn</groupId>
-      <artifactId>playn-java</artifactId>
       <version>${project.version}</version>
     </dependency>
 

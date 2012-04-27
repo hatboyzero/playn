@@ -27,23 +27,28 @@ public class IOSImage extends IOSAbstractImage
 {
   private final UIImage image;
 
-  IOSImage (IOSGLContext ctx, UIImage image) {
+  public IOSImage (IOSGLContext ctx, UIImage image) {
     super(ctx);
     this.image = image;
   }
 
   @Override
   public int width() {
-    return image.get_CGImage().get_Width();
+    return ctx.invScaledCeil(image.get_CGImage().get_Width());
   }
 
   @Override
   public int height() {
-    return image.get_CGImage().get_Height();
+    return ctx.invScaledCeil(image.get_CGImage().get_Height());
   }
 
   @Override
-  CGImage cgImage() {
+  public Region subImage(float x, float y, float width, float height) {
+    return new IOSImageRegion(this, x, y, width, height);
+  }
+
+  @Override
+  protected CGImage cgImage() {
     return image.get_CGImage();
   }
 
